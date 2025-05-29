@@ -23,6 +23,84 @@ fetch(chrome.runtime.getURL('dictionary.json'))
     // TODO: Implement fallback or error notification to the user
   });
 
+// Create context menu item
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: "readoku-translate",
+    title: "Translate with Readoku",
+    contexts: ["selection"]
+  });
+});
+
+// Listener for context menu click
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "readoku-translate" && info.selectionText) {
+    const textToTranslate = info.selectionText.trim();
+    // We need to get the translation and then send it to the content script
+    // to display it. We'll reuse the translation logic, but then
+    // message the content script to show it.
+
+    // This is a simplified version of the translation logic from onMessage.
+    // Ideally, this should be refactored into a reusable function.
+    const text = textToTranslate.toLowerCase();
+
+    // 1. Check cache
+    if (cache[text] && (Date.now() - cache[text].timestamp < CACHE_EXPIRY_MS)) {
+      console.log("Context menu: Cache hit for:", text);
+      sendTranslationToContentScript(tab.id, { translation: cache[text].translation, source: 'cache' }, textToTranslate);
+      return;
+    }
+
+    // 2. Check local dictionary
+    if (dictionary[text] && !text.includes(' ')) {
+      console.log("Context menu: Local dictionary hit for:", text);
+      const translation = dictionary[text];
+      cache[text] = { translation: translation, timestamp: Date.now() };
+      sendTranslationToContentScript(tab.id, { translation: translation, source: 'local' }, textToTranslate);
+      return;
+    }
+
+    // 3. Call proxy
+    console.log("Context menu: Calling proxy for:", text);
+    fetch('http://localhost:5001/translate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text: textToTranslate })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Proxy request failed with status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+      if (data.translation) {
+        cache[textToTranslate.toLowerCase()] = { translation: data.translation, timestamp: Date.now() };
+        sendTranslationToContentScript(tab.id, { translation: data.translation, source: 'chatgpt' }, textToTranslate);
+      } else if (data.error) {
+        console.error("Context menu: Error from proxy:", data.error);
+        sendTranslationToContentScript(tab.id, { error: data.error, source: 'chatgpt' }, textToTranslate);
+      } else {
+        throw new Error("Invalid response from proxy");
+      }
+    })
+    .catch(error => {
+      console.error("Context menu: Error calling proxy:", error);
+      sendTranslationToContentScript(tab.id, { error: error.message || "Failed to translate via proxy", source: 'chatgpt' }, textToTranslate);
+    });
+  }
+});
+
+function sendTranslationToContentScript(tabId, translationResponse, originalText) {
+  chrome.tabs.sendMessage(tabId, {
+    action: "showContextMenuTranslation",
+    data: translationResponse,
+    originalText: originalText // We might need this if content.js needs to know what was selected
+  });
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "translate") {
     const text = request.text.toLowerCase(); // Normalize text
