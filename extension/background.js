@@ -47,16 +47,17 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     // 1. Check cache
     if (cache[text] && (Date.now() - cache[text].timestamp < CACHE_EXPIRY_MS)) {
       console.log("Context menu: Cache hit for:", text);
-      sendTranslationToContentScript(tab.id, { translation: cache[text].translation, source: 'cache' }, textToTranslate);
+      // Cache now stores the full object if it was a local hit, or string from proxy
+      sendTranslationToContentScript(tab.id, { translation: cache[text].data, source: cache[text].source_type }, textToTranslate);
       return;
     }
 
     // 2. Check local dictionary
-    if (dictionary[text] && !text.includes(' ')) {
+    if (dictionary[text] && !text.includes(' ')) { // Assuming single words are in new rich format
       console.log("Context menu: Local dictionary hit for:", text);
-      const translation = dictionary[text];
-      cache[text] = { translation: translation, timestamp: Date.now() };
-      sendTranslationToContentScript(tab.id, { translation: translation, source: 'local' }, textToTranslate);
+      const richTranslationData = dictionary[text]; // This is now an object
+      cache[text] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local' };
+      sendTranslationToContentScript(tab.id, { translation: richTranslationData, source: 'local' }, textToTranslate);
       return;
     }
 
@@ -77,7 +78,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     })
     .then(data => {
       if (data.translation) {
-        cache[textToTranslate.toLowerCase()] = { translation: data.translation, timestamp: Date.now() };
+        // Proxy still returns a simple string translation
+        cache[textToTranslate.toLowerCase()] = { data: data.translation, timestamp: Date.now(), source_type: 'chatgpt' };
         sendTranslationToContentScript(tab.id, { translation: data.translation, source: 'chatgpt' }, textToTranslate);
       } else if (data.error) {
         console.error("Context menu: Error from proxy:", data.error);
@@ -108,17 +110,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // 1. Check cache
     if (cache[text] && (Date.now() - cache[text].timestamp < CACHE_EXPIRY_MS)) {
       console.log("Cache hit for:", text);
-      sendResponse({ translation: cache[text].translation, source: 'cache' });
-      return true; // Keep message channel open for async response if needed later
+      // Cache stores full object for local, string for proxy
+      sendResponse({ translation: cache[text].data, source: cache[text].source_type });
+      return true; 
     }
 
     // 2. Check local dictionary (for single words)
-    // TODO: Add a more robust check for what constitutes a "single word"
-    if (dictionary[text] && !text.includes(' ')) {
+    if (dictionary[text] && !text.includes(' ')) { // Assuming single words in dictionary are in new rich format
       console.log("Local dictionary hit for:", text);
-      const translation = dictionary[text];
-      cache[text] = { translation: translation, timestamp: Date.now() };
-      sendResponse({ translation: translation, source: 'local' });
+      const richTranslationData = dictionary[text]; // This is now an object
+      cache[text] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local' };
+      sendResponse({ translation: richTranslationData, source: 'local' });
       return true;
     }
 
@@ -141,7 +143,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })
     .then(data => {
       if (data.translation) {
-        cache[request.text.toLowerCase()] = { translation: data.translation, timestamp: Date.now() };
+        // Proxy still returns a simple string translation
+        cache[request.text.toLowerCase()] = { data: data.translation, timestamp: Date.now(), source_type: 'chatgpt' };
         sendResponse({ translation: data.translation, source: 'chatgpt' });
       } else if (data.error) {
         console.error("Error from proxy:", data.error);

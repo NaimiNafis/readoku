@@ -59,8 +59,16 @@ function showTranslation(text, eventForPositioning) {
     }
     
     if (response) {
+      // Response.translation can now be an object (from local dict) or string (from proxy)
+      // Response.source tells us where it came from ('local', 'chatgpt', 'cache' - though cache now mirrors original source type)
       if (response.translation) {
-        localPopup.innerHTML = `${response.translation} <small>(${response.source || 'unknown'})</small>`;
+        if (typeof response.translation === 'object' && response.source === 'local') {
+          localPopup.innerHTML = buildRichTranslationHtml(response.translation, text);
+        } else if (typeof response.translation === 'string') { // From proxy or old cache format
+          localPopup.innerHTML = `<div class="translation-simple">${response.translation}</div> <small>(${response.source || 'unknown'})</small>`;
+        } else {
+           localPopup.innerHTML = 'Error: Unexpected translation format received.';
+        }
       } else if (response.error) {
         localPopup.innerHTML = `Error: ${response.error} <small>(${response.source || 'proxy'})</small>`;
       } else {
@@ -76,6 +84,60 @@ function showTranslation(text, eventForPositioning) {
   });
 }
 
+// Function to build HTML for rich translation data
+function buildRichTranslationHtml(data, originalWord) {
+  // Sanitize data before putting into HTML to prevent XSS if data could be user-generated or from less trusted source
+  // For now, assuming dictionary.json is trusted.
+  
+  let html = '<div class="translation-rich">';
+  
+  // Word and Readings
+  html += '<div class="translation-header">';
+  html +=   `<div class="translation-word">${data.reading_jp || originalWord}</div>`;
+  if (data.reading_romaji) {
+    html +=   `<div class="translation-romaji">(${data.reading_romaji})</div>`;
+  }
+  html += '</div>';
+
+  // Part of Speech
+  if (data.part_of_speech) {
+    html += `<div class="translation-pos">(${data.part_of_speech})</div>`;
+  }
+
+  // Definition
+  if (data.definition_en) {
+    html += '<div class="translation-section-header">📝 Definition</div>';
+    html += `<div class="translation-definition">${data.definition_en}</div>`;
+  }
+
+  // Explanation in Japanese
+  if (data.explanation_jp) {
+    html += '<div class="translation-section-header">💡 Explanation (Japanese)</div>';
+    html += `<div class="translation-explanation-jp">${data.explanation_jp}</div>`;
+  }
+  
+  // Example Sentence
+  if (data.example_en && data.example_jp) {
+    html += '<div class="translation-section-header">📘 Example Sentence</div>';
+    html += '<div class="translation-example">';
+    html +=   `<div class="translation-example-en">"${data.example_en}"</div>`;
+    html +=   `<div class="translation-example-jp">→ ${data.example_jp}</div>`;
+    html += '</div>';
+  }
+
+  // Footer actions (placeholders for now)
+  html += '<div class="translation-footer">';
+  if (data.audio_url) { // Placeholder, audio not implemented yet
+    html +=   '<button class="translation-action-btn" data-action="play-audio">🔊 Play</button>';
+  }
+  html +=   '<button class="translation-action-btn" data-action="view-dict">📖 View in Dict</button>';
+  html +=   '<button class="translation-action-btn" data-action="copy-translation">📎 Copy</button>';
+  html += '</div>';
+  
+  html += '</div>'; // close translation-rich
+  return html;
+}
+
 // Function to hide the popup
 function hidePopup() {
   if (popup) {
@@ -87,19 +149,21 @@ function hidePopup() {
 // Listener for messages from the background script (e.g., for context menu)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "showContextMenuTranslation") {
-    const { data, originalText } = request;
+    const { data, originalText } = request; // data here is the response object from background
     const localPopup = getOrCreatePopup();
 
-    if (data) {
-      if (data.translation) {
-        localPopup.innerHTML = `${data.translation} <small>(${data.source || 'unknown'})</small>`;
-      } else if (data.error) {
-        localPopup.innerHTML = `Error: ${data.error} <small>(${data.source || 'proxy'})</small>`;
+    if (data && data.translation) { // data.translation can be object or string
+      if (typeof data.translation === 'object' && data.source === 'local') {
+        localPopup.innerHTML = buildRichTranslationHtml(data.translation, originalText);
+      } else if (typeof data.translation === 'string') {
+        localPopup.innerHTML = `<div class="translation-simple">${data.translation}</div> <small>(${data.source || 'unknown'})</small>`;
       } else {
-        localPopup.innerHTML = 'Error: Unexpected response from context menu action.';
+         localPopup.innerHTML = 'Error: Unexpected translation format from context menu.';
       }
+    } else if (data && data.error) {
+      localPopup.innerHTML = `Error: ${data.error} <small>(${data.source || 'proxy'})</small>`;
     } else {
-      localPopup.innerHTML = 'Error: No data received from context menu action.';
+      localPopup.innerHTML = 'Error: No data/translation received from context menu action.';
     }
 
     localPopup.style.display = 'block';

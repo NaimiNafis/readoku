@@ -1,12 +1,22 @@
 {
-  "hello": "こんにちは",
-  "world": "世界",
-  "apple": "りんご",
-  "orange": "オレンジ",
-  "developer": "開発者",
-  "code": "コード",
-  "computer": "コンピューター",
-  "mouse": "マウス",
-  "keyboard": "キーボード",
-  "software": "ソフトウェア"
+  "software": {
+    "reading_jp": "ソフトウェア",
+    "reading_romaji": "sofutouea",
+    "part_of_speech": "noun",
+    "definition_en": "A set of instructions, data, or programs used to operate computers and execute specific tasks.",
+    "explanation_jp": "コンピューターで動作するプログラムやアプリケーションのこと。",
+    "example_en": "I installed new software on my laptop.",
+    "example_jp": "ノートパソコンに新しいソフトウェアをインストールした。",
+    "audio_url": null
+  },
+  "apple": {
+    "reading_jp": "りんご",
+    "reading_romaji": "ringo",
+    "part_of_speech": "noun",
+    "definition_en": "A round fruit with firm, white flesh and a green or red skin.",
+    "explanation_jp": "バラ科の落葉高木。また、その果実。",
+    "example_en": "An apple a day keeps the doctor away.",
+    "example_jp": "一日一個のりんごは医者を遠ざける。",
+    "audio_url": null
+  }
 }
