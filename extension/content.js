@@ -1,80 +1,89 @@
 let popup = null;
-let hoverTimeout = null;
-const HOVER_DELAY_MS = 300; // Delay before showing popup
 
-document.addEventListener('mousemove', (event) => {
-  if (hoverTimeout) {
-    clearTimeout(hoverTimeout);
+document.addEventListener('mouseup', (event) => {
+  // Don't show popup if we are clicking inside an existing popup
+  if (popup && popup.contains(event.target)) {
+    return;
   }
 
-  hoverTimeout = setTimeout(() => {
-    const selectedText = window.getSelection().toString().trim();
+  const selectedText = window.getSelection().toString().trim();
 
-    if (selectedText && selectedText.length > 0 && selectedText.length < 200) { // Added length check
-      if (!popup) {
-        popup = document.createElement('div');
-        popup.id = 'readoku-popup';
-        document.body.appendChild(popup);
+  if (selectedText && selectedText.length > 0 && selectedText.length < 200) {
+    if (!popup) {
+      popup = document.createElement('div');
+      popup.id = 'readoku-popup';
+      document.body.appendChild(popup);
+    }
+
+    popup.innerHTML = '<div class="loader"></div>';
+    popup.style.display = 'block';
+
+    // Initial position based on mouse cursor
+    let preferredLeft = event.clientX + 15;
+    let preferredTop = event.clientY + 15;
+
+    // Position calculation function
+    function positionPopup(currentPopup, pLeft, pTop) {
+      const popupRect = currentPopup.getBoundingClientRect();
+      let finalLeft = pLeft;
+      let finalTop = pTop;
+
+      if (finalLeft + popupRect.width > window.innerWidth) {
+        finalLeft = window.innerWidth - popupRect.width - 10;
       }
-
-      popup.innerHTML = '<div class="loader"></div>'; // Basic loader
-      popup.style.display = 'block';
-      // Adjust position to avoid cursor overlap, ensure it's within viewport
-      let left = event.clientX + 15;
-      let top = event.clientY + 15;
-
-      // Basic viewport collision detection
-      const popupRect = popup.getBoundingClientRect(); // Get initial dimensions with loader
-      if (left + popupRect.width > window.innerWidth) {
-          left = window.innerWidth - popupRect.width - 10;
+      if (finalTop + popupRect.height > window.innerHeight) {
+        finalTop = window.innerHeight - popupRect.height - 10;
       }
-      if (top + popupRect.height > window.innerHeight) {
-          top = window.innerHeight - popupRect.height - 10;
+      if (finalLeft < 0) finalLeft = 10;
+      if (finalTop < 0) finalTop = 10;
+
+      currentPopup.style.left = `${finalLeft}px`;
+      currentPopup.style.top = `${finalTop}px`;
+    }
+
+    // Position with loader
+    positionPopup(popup, preferredLeft, preferredTop);
+
+    chrome.runtime.sendMessage({ action: 'translate', text: selectedText }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("Runtime error:", chrome.runtime.lastError.message);
+        if (popup) popup.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+        return;
       }
-      if (left < 0) left = 10;
-      if (top < 0) top = 10;
-
-      popup.style.left = `${left}px`;
-      popup.style.top = `${top}px`;
-
-      chrome.runtime.sendMessage({ action: 'translate', text: selectedText }, (response) => {
-        if (chrome.runtime.lastError) {
-          // Handle errors like if the extension context is invalidated
-          console.error("Runtime error:", chrome.runtime.lastError.message);
-          if(popup) popup.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
-          return;
-        }
-        
-        if (response) {
-          if (response.translation) {
-            // TODO: Sanitize HTML if translation can contain it
-            popup.innerHTML = `${response.translation} <small>(${response.source || 'unknown'})</small>`;
-          } else if (response.error) {
-            popup.innerHTML = `Error: ${response.error} <small>(${response.source || 'proxy'})</small>`;
-          } else {
-            popup.innerHTML = 'Error: Unexpected response.';
-          }
+      
+      if (response) {
+        if (response.translation) {
+          popup.innerHTML = `${response.translation} <small>(${response.source || 'unknown'})</small>`;
+        } else if (response.error) {
+          popup.innerHTML = `Error: ${response.error} <small>(${response.source || 'proxy'})</small>`;
         } else {
-          // This case might happen if background script couldn't send a response
-          popup.innerHTML = 'Error: No response from background.';
+          popup.innerHTML = 'Error: Unexpected response.';
         }
-        // Re-adjust position if content changes size significantly
-        // For simplicity, we'll skip this for now but it's a TODO for better UX
-      });
-    } else {
-      if (popup) {
-        popup.style.display = 'none';
+      } else {
+        popup.innerHTML = 'Error: No response from background.';
       }
+      
+      // Re-position after content is loaded, as size might have changed
+      if (popup.style.display === 'block') { // Only if still visible
+        positionPopup(popup, preferredLeft, preferredTop); // Recalculate with new content
+      }
+    });
+  } else {
+    if (popup) {
+      popup.style.display = 'none';
     }
-  }, HOVER_DELAY_MS);
+  }
 });
 
-document.addEventListener('mousedown', () => {
-    if (popup) {
+document.addEventListener('mousedown', (event) => {
+  if (popup && popup.style.display !== 'none' && !popup.contains(event.target)) {
+    const selection = window.getSelection();
+    // If the click is outside the popup AND it's not part of a new selection starting
+    if (!selection.toString().trim()) { 
         popup.style.display = 'none';
     }
+  }
 });
 
-// TODO: Implement more robust hover detection (e.g., debouncing, handling iframes, ignoring specific elements)
 // TODO: Add option to pin the popup
-// TODO: Better viewport collision and dynamic repositioning 
+// TODO: Better viewport collision and dynamic repositioning (partially addressed) 
