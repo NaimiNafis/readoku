@@ -227,7 +227,9 @@ document.addEventListener('keyup', (event) => {
       clearTimeout(hoverDetectionTimeout);
       hoverDetectionTimeout = null;
     }
-    hidePopup();
+    // Do NOT hide the popup here anymore. It will stay until clicked outside.
+    // hidePopup(); 
+    lastHoveredWord = ""; // Still reset last hovered word for next Shift cycle
   }
 });
 
@@ -262,6 +264,14 @@ document.addEventListener('mousemove', (event) => {
       // hidePopup(); // Let's be less aggressive for now
     }
   }, HOVER_DEBOUNCE_DELAY);
+});
+
+// Simplified mousedown listener for clicking outside the popup to close it
+// This will now handle dismissal for both Shift-hover and context-menu popups.
+document.addEventListener('mousedown', (event) => {
+  if (popup && popup.style.display !== 'none' && !popup.contains(event.target)) {
+    hidePopup(); // Simply hide if click is outside
+  }
 });
 
 // TODO: Add option to pin the popup
