@@ -5,10 +5,14 @@
   padding: 10px;
   z-index: 9999;
   font-size: 14px;
-  max-width: 300px;
+  max-width: 350px;
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
   border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
   color: #333;
+  word-wrap: break-word;
 }
 
 #readoku-popup small {
