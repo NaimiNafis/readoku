@@ -75,39 +75,55 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    // 3. Call proxy for ChatGPT translation (for phrases or unknown words)
-    console.log("Calling proxy for:", text);
+    // 3. Call proxy for Gemini translation (for phrases or unknown words)
+    console.log("Calling Gemini proxy for:", text);
     // TODO: Make proxy URL configurable
-    fetch('http://localhost:5001/translate', {
+    const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; // Example URL
+
+    // Example request body structure - this needs to be defined
+    const requestBody = {
+      prompt: request.text, // Send original case text
+      targetLanguage: "ja" // Example: assuming Japanese is the target
+      // Add any other parameters for proxy/Gemini setup requires
+    };
+
+    fetch(geminiProxyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Add any other headers gemini's proxy might require (e.g., API keys if handled by proxy but still signaled)
       },
-      body: JSON.stringify({ text: request.text }) // Send original case text to proxy
+      body: JSON.stringify(requestBody)
     })
     .then(response => {
         if (!response.ok) {
-            // TODO: Handle HTTP errors more gracefully (e.g. proxy server down)
-            throw new Error(`Proxy request failed with status: ${response.status}`);
+            // Attempt to parse error from backend if available, otherwise use statusText
+            return response.json().catch(() => null).then(errorBody => {
+                const errorMessage = errorBody?.errorMessage || errorBody?.error || response.statusText;
+                throw new Error(`Proxy request failed: ${response.status} ${errorMessage}`);
+            });
         }
         return response.json();
     })
     .then(data => {
-      if (data.translation) {
-        // Proxy still returns a simple string translation
-        cache[request.text.toLowerCase()] = { data: data.translation, timestamp: Date.now(), source_type: 'chatgpt' };
-        sendResponse({ translation: data.translation, source: 'chatgpt' });
-      } else if (data.error) {
-        console.error("Error from proxy:", data.error);
-        sendResponse({ error: data.error, source: 'chatgpt' });
+      // Example: Adjust based on the actual response structure from gemini's proxy
+      if (data.translatedText) {
+        cache[request.text.toLowerCase()] = { data: data.translatedText, timestamp: Date.now(), source_type: 'gemini' };
+        sendResponse({ translation: data.translatedText, source: 'gemini' });
+      } else if (data.errorMessage) {
+        console.error("Error from Gemini proxy:", data.errorMessage);
+        sendResponse({ error: data.errorMessage, source: 'gemini' });
+      } else if (data.error) { // Fallback for a generic error field
+        console.error("Error from Gemini proxy (generic):", data.error);
+        sendResponse({ error: data.error, source: 'gemini' });
       } else {
-        throw new Error("Invalid response from proxy");
+        console.error("Invalid or unexpected response structure from Gemini proxy:", data);
+        throw new Error("Invalid response from Gemini proxy");
       }
     })
     .catch(error => {
-      console.error("Error calling proxy:", error);
-      sendResponse({ error: error.message || "Failed to translate via proxy", source: 'chatgpt' });
-      // TODO: Notify user of the error
+      console.error("Error calling Gemini proxy:", error);
+      sendResponse({ error: error.message || "Failed to translate via Gemini proxy", source: 'gemini' });
     });
 
     return true; // Indicates that the response is sent asynchronously
