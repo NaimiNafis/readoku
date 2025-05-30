@@ -32,16 +32,27 @@
 }
 
 .translation-word {
+  display: flex;
+  justify-content: space-between;
   font-size: 1.4em;
   font-weight: bold;
   color: #2c3e50;
-  margin-bottom: 2px;
+}
+
+.to-copy{
+  display: flex;
+}
+
+#check-symbol{
+  color: green;
+  margin-right: 5px;
+  margin-bottom: 0;
 }
 
 .translation-romaji {
   font-size: 0.9em;
   color: #555;
-  margin-bottom: 5px;
+  margin-bottom: 10px;
 }
 
 .translation-pos {

@@ -65,6 +65,31 @@ function showTranslation(text, eventForPositioning) {
       if (response.translation) {
         if (typeof response.translation === 'object' && response.source === 'local') {
           localPopup.innerHTML = buildRichTranslationHtml(response.translation, text);
+          
+          const copyButton = document.querySelector('[data-action="copy-translation"]');
+          const translation = document.getElementById('translation');
+          const check = document.getElementById('check-symbol');
+
+          async function copyTranslationToClipboard(text){
+            try{
+              await navigator.clipboard.writeText(text);
+              console.log("translation successfully copied to clipboard!");
+              check.textContent = "✔";
+            }catch(err){
+              console.error('Failed to copy plain text: ', err);
+            }finally{
+              setTimeout(()=>{
+                check.textContent = '';
+              }, 3000);
+            }
+          }
+
+          if(copyButton && translation && check){
+            copyButton.addEventListener('click', ()=>{
+              copyTranslationToClipboard(translation.innerText);
+            })
+          }
+
         } else if (typeof response.translation === 'string') { // From proxy or old cache format
           localPopup.innerHTML = `<div class="translation-simple">${response.translation}</div> <small>(${response.source || 'unknown'})</small>`;
         } else {
@@ -94,7 +119,13 @@ function buildRichTranslationHtml(data, originalWord) {
   
   // Word and Readings
   html += '<div class="translation-header">';
-  html +=   `<div class="translation-word">${data.reading_jp || originalWord}</div>`;
+  html +=   `<div class="translation-word">
+                <div id="translation">${data.reading_jp || originalWord}</div>
+                <div class="to-copy">
+                  <p id="check-symbol"></p>
+                  <button class="translation-action-btn" data-action="copy-translation">📎 Copy</button>
+                </div>
+            </div>`;
   if (data.reading_romaji) {
     html +=   `<div class="translation-romaji">(${data.reading_romaji})</div>`;
   }
@@ -131,8 +162,6 @@ function buildRichTranslationHtml(data, originalWord) {
   if (data.audio_url) { // Placeholder, audio not implemented yet
     html +=   '<button class="translation-action-btn" data-action="play-audio">🔊 Play</button>';
   }
-  html +=   '<button class="translation-action-btn" data-action="view-dict">📖 View in Dict</button>';
-  html +=   '<button class="translation-action-btn" data-action="copy-translation">📎 Copy</button>';
   html += '</div>';
   
   html += '</div>'; // close translation-rich
