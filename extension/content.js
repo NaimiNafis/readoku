@@ -74,7 +74,7 @@ function showTranslation(text, eventForPositioning) {
             try{
               await navigator.clipboard.writeText(text);
               console.log("translation successfully copied to clipboard!");
-              check.textContent = "✔";
+              check.textContent = "✓";
             }catch(err){
               console.error('Failed to copy plain text: ', err);
             }finally{
@@ -123,7 +123,7 @@ function buildRichTranslationHtml(data, originalWord) {
                 <div id="translation">${data.reading_jp || originalWord}</div>
                 <div class="to-copy">
                   <p id="check-symbol"></p>
-                  <button class="translation-action-btn" data-action="copy-translation">📎 Copy</button>
+                  <button class="translation-action-btn" data-action="copy-translation">📎</button>
                 </div>
             </div>`;
   if (data.reading_romaji) {

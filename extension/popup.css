@@ -6,7 +6,9 @@
   z-index: 9999;
   font-size: 14px;
   max-width: 350px;
-  max-height: 220px;
+  min-height: 220px;
+  height: auto;
+  resize: vertical;
   overflow-y: auto;
   overflow-x: hidden;
   border-radius: 5px;
