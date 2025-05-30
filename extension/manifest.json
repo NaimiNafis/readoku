@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "readoku",
+  "name": "Readoku",
   "version": "0.1.0",
   "description": "Translate English text to Japanese on hover.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage",
-    "contextMenus"
+    "storage"
   ],
   "background": {
     "service_worker": "background.js",

@@ -3,6 +3,7 @@ let isShiftHeld = false;
 let lastHoveredWord = ""; // To avoid redundant processing for the same word
 let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 150; // ms, adjust as needed
+let selectionActionButton = null; // Our new action button
 
 // Function to create/get the popup
 function getOrCreatePopup() {
@@ -146,58 +147,6 @@ function hidePopup() {
   lastHoveredWord = ""; // Reset last hovered word
 }
 
-// Listener for messages from the background script (e.g., for context menu)
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "showContextMenuTranslation") {
-    const { data, originalText } = request; // data here is the response object from background
-    const localPopup = getOrCreatePopup();
-
-    if (data && data.translation) { // data.translation can be object or string
-      if (typeof data.translation === 'object' && data.source === 'local') {
-        localPopup.innerHTML = buildRichTranslationHtml(data.translation, originalText);
-      } else if (typeof data.translation === 'string') {
-        localPopup.innerHTML = `<div class="translation-simple">${data.translation}</div> <small>(${data.source || 'unknown'})</small>`;
-      } else {
-         localPopup.innerHTML = 'Error: Unexpected translation format from context menu.';
-      }
-    } else if (data && data.error) {
-      localPopup.innerHTML = `Error: ${data.error} <small>(${data.source || 'proxy'})</small>`;
-    } else {
-      localPopup.innerHTML = 'Error: No data/translation received from context menu action.';
-    }
-
-    localPopup.style.display = 'block';
-    // Positioning for context menu can be tricky as we don't have a direct mouse event here.
-    // Option 1: Center of screen (very basic)
-    // localPopup.style.left = `${window.innerWidth / 2 - localPopup.offsetWidth / 2}px`;
-    // localPopup.style.top = `${window.innerHeight / 2 - localPopup.offsetHeight / 2}px`;
-    // Option 2: Try to use selection bounding box if possible (more complex)
-    const selection = window.getSelection();
-    let targetRect;
-    if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        targetRect = range.getBoundingClientRect();
-    }
-
-    if (targetRect) {
-        // Position near the selection
-        positionPopup(localPopup, targetRect.left, targetRect.bottom + 5);
-    } else {
-        // Fallback: center of the screen or last known mouse if we stored it.
-        // For now, rough center.
-        const currentWidth = localPopup.offsetWidth || 300; // estimate width
-        const currentHeight = localPopup.offsetHeight || 100; // estimate height
-        localPopup.style.left = `${window.innerWidth / 2 - currentWidth / 2}px`;
-        localPopup.style.top = `${window.innerHeight / 2 - currentHeight / 2}px`;
-    }
-    // Make sure it's still within viewport after content set & rough positioning
-    positionPopup(localPopup, parseFloat(localPopup.style.left), parseFloat(localPopup.style.top)); 
-
-    // No sendResponse needed if it's just displaying data.
-  }
-  // Note: Ensure this doesn't conflict with any other onMessage listeners if you add more.
-});
-
 // Word detection logic (basic implementation)
 function getWordAtPoint(element, x, y) {
   if (!element || typeof element.nodeType !== 'number') {
@@ -276,6 +225,39 @@ function getWordAtPoint(element, x, y) {
   return null; 
 }
 
+// Function to get or create the selection action button
+function getOrCreateSelectionActionButton() {
+  if (!selectionActionButton) {
+    selectionActionButton = document.createElement('button');
+    selectionActionButton.id = 'readoku-selection-action-btn';
+    // Using text for now, can be an icon later
+    selectionActionButton.textContent = 'R⚡'; // R for Readoku, Lightning for quick action
+    document.body.appendChild(selectionActionButton);
+
+    selectionActionButton.addEventListener('click', (event) => {
+      event.stopPropagation(); // Prevent this click from being caught by document mousedown listener
+      const selectedText = window.getSelection().toString().trim();
+      if (selectedText) {
+        showTranslation(selectedText, event); // Pass the click event for positioning popup
+      }
+      hideSelectionActionButton(); // Hide button after click
+    });
+  }
+  return selectionActionButton;
+}
+
+function showSelectionActionButton(x, y) {
+  const btn = getOrCreateSelectionActionButton();
+  btn.style.left = `${x}px`;
+  btn.style.top = `${y}px`;
+  btn.style.display = 'block';
+}
+
+function hideSelectionActionButton() {
+  if (selectionActionButton) {
+    selectionActionButton.style.display = 'none';
+  }
+}
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Shift' && !event.repeat) {
@@ -287,54 +269,93 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keyup', (event) => {
   if (event.key === 'Shift') {
     isShiftHeld = false;
-    if (hoverDetectionTimeout) { // Clear any pending hover detection
+    if (hoverDetectionTimeout) {
       clearTimeout(hoverDetectionTimeout);
       hoverDetectionTimeout = null;
     }
-    // Do NOT hide the popup here anymore. It will stay until clicked outside.
-    // hidePopup(); 
-    lastHoveredWord = ""; // Still reset last hovered word for next Shift cycle
+    lastHoveredWord = ""; 
   }
 });
 
 document.addEventListener('mousemove', (event) => {
-  if (!isShiftHeld) {
-    // If shift is not held, but popup is visible (e.g. from previous selection mode), hide it.
-    // This depends on whether we want selection mode and hover mode to coexist or be exclusive.
-    // For now, let's assume Shift-hover is the primary way, so hide if not Shift-hovering.
-    // However, the original selection based code is removed.
-    // if (popup && popup.style.display === 'block') {
-    //   hidePopup();
-    // }
-    return;
-  }
+  if (!isShiftHeld) return;
 
-  // Debounce mousemove
   if (hoverDetectionTimeout) {
     clearTimeout(hoverDetectionTimeout);
   }
-
   hoverDetectionTimeout = setTimeout(() => {
     const targetElement = event.target;
-    const word = getWordAtPoint(targetElement, event.clientX, event.clientY);
+    // Avoid showing hover popup if the selection action button is visible or if a selection is active
+    if (selectionActionButton && selectionActionButton.style.display === 'block') return;
+    if (window.getSelection().toString().trim()) return; // Don't show hover if text is selected
 
+    const word = getWordAtPoint(targetElement, event.clientX, event.clientY);
     if (word && word !== lastHoveredWord) {
       lastHoveredWord = word;
-      console.log("Hovered word:", word); // For debugging
       showTranslation(word, event);
-    } else if (!word && popup && popup.style.display === 'block') {
-      // If no word is found under cursor (e.g., moved to empty space) and popup is visible, hide it.
-      // This check might be too aggressive if getWordAtPoint is flaky.
-      // hidePopup(); // Let's be less aggressive for now
+    } else if (!word && popup && popup.style.display === 'block' && !popup.contains(event.target)) {
+      // Consider if hover popup should auto-hide when mouse moves to non-word and it's not over the popup itself.
+      // This might be too aggressive now that popups are sticky.
+      // For now, popups only hide on outside click.
     }
   }, HOVER_DEBOUNCE_DELAY);
 });
 
-// Simplified mousedown listener for clicking outside the popup to close it
-// This will now handle dismissal for both Shift-hover and context-menu popups.
+// NEW: mouseup listener for showing the selection action button
+document.addEventListener('mouseup', (event) => {
+  // Don't show if shift is held (that's for hover translation)
+  // Or if the click was on an existing popup or the selection action button itself.
+  if (isShiftHeld || (popup && popup.contains(event.target)) || (selectionActionButton && selectionActionButton.contains(event.target))) {
+    return;
+  }
+
+  // Use a small timeout to allow click event to propagate and selection to finalize
+  setTimeout(() => {
+    const selectedText = window.getSelection().toString().trim();
+    if (selectedText) {
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(selection.rangeCount - 1); // Get the last range
+        const rects = range.getClientRects();
+        if (rects.length > 0) {
+          const lastRect = rects[rects.length - 1]; // Get the last rectangle of the selection
+          // Position button slightly after the end of the selection
+          let btnX = window.scrollX + lastRect.right + 5;
+          let btnY = window.scrollY + lastRect.bottom - (lastRect.height / 2) - 12; // Center vertically relative to last line, then shift up a bit
+          
+          // Basic viewport adjustment for button
+          if (btnX + 30 > window.innerWidth) btnX = window.innerWidth - 30;
+          if (btnY + 30 > window.innerHeight) btnY = window.innerHeight - 30;
+          if (btnY < 0) btnY = 0;
+
+          showSelectionActionButton(btnX, btnY);
+        } else {
+            hideSelectionActionButton(); // Hide if no valid rects (e.g. empty selection)
+        }
+      }
+    } else {
+      hideSelectionActionButton();
+    }
+  }, 10); // Small delay
+});
+
+// Universal mousedown listener for clicking outside to close popups AND the new action button
 document.addEventListener('mousedown', (event) => {
-  if (popup && popup.style.display !== 'none' && !popup.contains(event.target)) {
-    hidePopup(); // Simply hide if click is outside
+  let clickedOnReadokuUI = false;
+  if (popup && popup.contains(event.target)) {
+    clickedOnReadokuUI = true;
+  }
+  if (selectionActionButton && selectionActionButton.contains(event.target)) {
+    clickedOnReadokuUI = true;
+  }
+
+  if (!clickedOnReadokuUI) {
+    if (popup && popup.style.display !== 'none') {
+      hidePopup();
+    }
+    if (selectionActionButton && selectionActionButton.style.display !== 'none') {
+      hideSelectionActionButton();
+    }
   }
 });
 
