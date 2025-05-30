@@ -2,7 +2,7 @@ let popup = null;
 let isShiftHeld = false;
 let lastHoveredWord = ""; // To avoid redundant processing for the same word
 let hoverDetectionTimeout = null; // To debounce mousemove
-const HOVER_DEBOUNCE_DELAY = 150; // ms, adjust as needed
+const HOVER_DEBOUNCE_DELAY = 10; // ms, adjust as needed (was 150ms)
 let selectionActionButton = null; // Our new action button
 let isExtensionEnabled = true; // Assume enabled by default, will be updated
 
@@ -408,15 +408,11 @@ function handleKeyDown(event) {
 function handleKeyUp(event) {
   if (event.key === 'Shift') {
     isShiftHeld = false;
-    // If shift is released, hide the hover-triggered popup
-    // Check if popup is visible and was likely triggered by hover (not selection)
-    // This logic might need refinement based on how selection popups are managed
-    if (popup && popup.style.display === 'block' /*&& !isSelectionPopup() for example */) {
-        // A more robust check might involve a flag for "hover popup" vs "selection popup"
-        // For now, a simple hide is fine, assuming selection popups are handled differently
-        // or that hiding them on shift-up is acceptable.
-      hidePopup();
-    }
+    // If shift is released, NO LONGER hide the hover-triggered popup here.
+    // Hiding is now solely managed by handleMouseDown (click outside) or when extension is disabled.
+    // if (popup && popup.style.display === 'block' /*&& !isSelectionPopup() for example */) {
+    //     hidePopup();
+    // }
     if (hoverDetectionTimeout) { // Clear any pending hover detection
         clearTimeout(hoverDetectionTimeout);
         hoverDetectionTimeout = null;
