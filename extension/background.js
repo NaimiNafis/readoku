@@ -23,88 +23,39 @@ fetch(chrome.runtime.getURL('dictionary.json'))
     // TODO: Implement fallback or error notification to the user
   });
 
-// Create context menu item
+// Removed context menu creation and listener logic
+
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: "readoku-translate",
-    title: "Translate with Readoku",
-    contexts: ["selection"]
+  // Set an initial state when the extension is installed or updated
+  // Default to enabled (true)
+  chrome.storage.local.get(['extensionEnabled'], function(result) {
+    if (result.extensionEnabled === undefined) {
+      chrome.storage.local.set({ extensionEnabled: true });
+      console.log("Extension enabled by default on installation.");
+    }
   });
 });
-
-// Listener for context menu click
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "readoku-translate" && info.selectionText) {
-    const textToTranslate = info.selectionText.trim();
-    // We need to get the translation and then send it to the content script
-    // to display it. We'll reuse the translation logic, but then
-    // message the content script to show it.
-
-    // This is a simplified version of the translation logic from onMessage.
-    // Ideally, this should be refactored into a reusable function.
-    const text = textToTranslate.toLowerCase();
-
-    // 1. Check cache
-    if (cache[text] && (Date.now() - cache[text].timestamp < CACHE_EXPIRY_MS)) {
-      console.log("Context menu: Cache hit for:", text);
-      // Cache now stores the full object if it was a local hit, or string from proxy
-      sendTranslationToContentScript(tab.id, { translation: cache[text].data, source: cache[text].source_type }, textToTranslate);
-      return;
-    }
-
-    // 2. Check local dictionary
-    if (dictionary[text] && !text.includes(' ')) { // Assuming single words are in new rich format
-      console.log("Context menu: Local dictionary hit for:", text);
-      const richTranslationData = dictionary[text]; // This is now an object
-      cache[text] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local' };
-      sendTranslationToContentScript(tab.id, { translation: richTranslationData, source: 'local' }, textToTranslate);
-      return;
-    }
-
-    // 3. Call proxy
-    console.log("Context menu: Calling proxy for:", text);
-    fetch('http://localhost:5001/translate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ text: textToTranslate })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`Proxy request failed with status: ${response.status}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-      if (data.translation) {
-        // Proxy still returns a simple string translation
-        cache[textToTranslate.toLowerCase()] = { data: data.translation, timestamp: Date.now(), source_type: 'chatgpt' };
-        sendTranslationToContentScript(tab.id, { translation: data.translation, source: 'chatgpt' }, textToTranslate);
-      } else if (data.error) {
-        console.error("Context menu: Error from proxy:", data.error);
-        sendTranslationToContentScript(tab.id, { error: data.error, source: 'chatgpt' }, textToTranslate);
-      } else {
-        throw new Error("Invalid response from proxy");
-      }
-    })
-    .catch(error => {
-      console.error("Context menu: Error calling proxy:", error);
-      sendTranslationToContentScript(tab.id, { error: error.message || "Failed to translate via proxy", source: 'chatgpt' }, textToTranslate);
-    });
-  }
-});
-
-function sendTranslationToContentScript(tabId, translationResponse, originalText) {
-  chrome.tabs.sendMessage(tabId, {
-    action: "showContextMenuTranslation",
-    data: translationResponse,
-    originalText: originalText // We might need this if content.js needs to know what was selected
-  });
-}
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "translate") {
+  if (request.type === "TOGGLE_EXTENSION") {
+    const enabled = request.enabled;
+    console.log(`Extension state changed to: ${enabled ? 'Enabled' : 'Disabled'}`);
+    // Notify all active content scripts of the change
+    chrome.tabs.query({}, function(tabs) { // Query all tabs
+      for (let tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, { type: "EXTENSION_STATE_CHANGED", enabled: enabled }).catch(error => {
+            // Catch errors if content script isn't injected or tab is not accessible
+            if (error.message !== "Could not establish connection. Receiving end does not exist." && !error.message.includes("The message port closed before a response was received.")) {
+              console.warn(`Readoku (background): Could not send EXTENSION_STATE_CHANGED to tab ${tab.id}: ${error.message}`);
+            }
+          });
+        }
+      }
+    });
+    sendResponse({ success: true });
+    return true; // Keep message channel open for async response if needed, though not strictly here
+  } else if (request.action === "translate") {
     const text = request.text.toLowerCase(); // Normalize text
 
     // 1. Check cache
@@ -124,42 +75,64 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    // 3. Call proxy for ChatGPT translation (for phrases or unknown words)
-    console.log("Calling proxy for:", text);
+    // 3. Call proxy for Gemini translation (for phrases or unknown words)
+    console.log("Calling Gemini proxy for:", text);
     // TODO: Make proxy URL configurable
-    fetch('http://localhost:5001/translate', {
+    const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; // Example URL
+
+    // Example request body structure - this needs to be defined
+    const requestBody = {
+      prompt: request.text, // Send original case text
+      targetLanguage: "ja" // Example: assuming Japanese is the target
+      // Add any other parameters for proxy/Gemini setup requires
+    };
+
+    fetch(geminiProxyUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        // Add any other headers gemini's proxy might require (e.g., API keys if handled by proxy but still signaled)
       },
-      body: JSON.stringify({ text: request.text }) // Send original case text to proxy
+      body: JSON.stringify(requestBody)
     })
     .then(response => {
         if (!response.ok) {
-            // TODO: Handle HTTP errors more gracefully (e.g. proxy server down)
-            throw new Error(`Proxy request failed with status: ${response.status}`);
+            // Attempt to parse error from backend if available, otherwise use statusText
+            return response.json().catch(() => null).then(errorBody => {
+                const errorMessage = errorBody?.errorMessage || errorBody?.error || response.statusText;
+                throw new Error(`Proxy request failed: ${response.status} ${errorMessage}`);
+            });
         }
         return response.json();
     })
     .then(data => {
-      if (data.translation) {
-        // Proxy still returns a simple string translation
-        cache[request.text.toLowerCase()] = { data: data.translation, timestamp: Date.now(), source_type: 'chatgpt' };
-        sendResponse({ translation: data.translation, source: 'chatgpt' });
-      } else if (data.error) {
-        console.error("Error from proxy:", data.error);
-        sendResponse({ error: data.error, source: 'chatgpt' });
+      // Example: Adjust based on the actual response structure from gemini's proxy
+      if (data.translatedText) {
+        cache[request.text.toLowerCase()] = { data: data.translatedText, timestamp: Date.now(), source_type: 'gemini' };
+        sendResponse({ translation: data.translatedText, source: 'gemini' });
+      } else if (data.errorMessage) {
+        console.error("Error from Gemini proxy:", data.errorMessage);
+        sendResponse({ error: data.errorMessage, source: 'gemini' });
+      } else if (data.error) { // Fallback for a generic error field
+        console.error("Error from Gemini proxy (generic):", data.error);
+        sendResponse({ error: data.error, source: 'gemini' });
       } else {
-        throw new Error("Invalid response from proxy");
+        console.error("Invalid or unexpected response structure from Gemini proxy:", data);
+        throw new Error("Invalid response from Gemini proxy");
       }
     })
     .catch(error => {
-      console.error("Error calling proxy:", error);
-      sendResponse({ error: error.message || "Failed to translate via proxy", source: 'chatgpt' });
-      // TODO: Notify user of the error
+      console.error("Error calling Gemini proxy:", error);
+      sendResponse({ error: error.message || "Failed to translate via Gemini proxy", source: 'gemini' });
     });
 
     return true; // Indicates that the response is sent asynchronously
+  } else if (request.action === "GET_EXTENSION_STATE") {
+    chrome.storage.local.get(['extensionEnabled'], function (result) {
+      const isEnabled = result.extensionEnabled === undefined ? true : result.extensionEnabled;
+      sendResponse({ enabled: isEnabled });
+    });
+    return true; // Indicates asynchronous response
   }
 });
 

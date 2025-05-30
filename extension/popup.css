@@ -5,10 +5,14 @@
   padding: 10px;
   z-index: 9999;
   font-size: 14px;
-  max-width: 350px;
-  max-height: 220px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  width: 300px; /* Default width, user can resize */
+  max-width: 600px; /* Max width it can be resized to */
+  min-width: 200px; /* Min width it can be resized to */
+  height: auto;    /* Let content determine height initially */
+  min-height: 100px; /* Smaller min-height */
+  max-height: 400px; /* Max height before scrolling kicks in forcefully */
+  resize: both;      /* Allow both horizontal and vertical resize */
+  overflow: auto;    /* Use `auto` for both axes if `resize: both` */
   border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
   color: #333;
@@ -32,16 +36,27 @@
 }
 
 .translation-word {
+  display: flex;
+  justify-content: space-between;
   font-size: 1.4em;
   font-weight: bold;
   color: #2c3e50;
-  margin-bottom: 2px;
+}
+
+.to-copy{
+  display: flex;
+}
+
+#check-symbol{
+  color: green;
+  margin-right: 5px;
+  margin-bottom: 0;
 }
 
 .translation-romaji {
   font-size: 0.9em;
   color: #555;
-  margin-bottom: 5px;
+  margin-bottom: 10px;
 }
 
 .translation-pos {
@@ -105,6 +120,31 @@
 .translation-simple {
   font-size: 1.1em;
   line-height: 1.4;
+}
+
+/* Styles for Selection Action Button */
+#readoku-selection-action-btn {
+  position: fixed; /* Changed from absolute to fixed for consistency with main popup */
+  z-index: 9998; /* Just below main popup */
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 50%; /* Make it circular */
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  font-weight: bold;
+  text-align: center;
+  line-height: 24px; /* Vertically center text/icon */
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  display: none; /* Initially hidden */
+  transition: transform 0.1s ease-out;
+}
+
+#readoku-selection-action-btn:hover {
+  background-color: #2980b9;
+  transform: scale(1.1);
 }
 
 .loader {

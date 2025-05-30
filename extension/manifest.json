@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "readoku",
+  "name": "Readoku",
   "version": "0.1.0",
   "description": "Translate English text to Japanese on hover.",
   "permissions": [
     "activeTab",
     "scripting",
-    "storage",
-    "contextMenus"
+    "storage"
   ],
   "background": {
     "service_worker": "background.js",
@@ -36,5 +35,14 @@
       ]
     }
   ],
-  "action": {}
+  "action": {
+    "default_popup": "menu-popup/popup.html"
+  },
+  "icons": {
+    "16": "icons/logo/logo16.png",
+    "24": "icons/logo/logo24.png",
+    "32": "icons/logo/logo32.png",
+    "48": "icons/logo/logo48.png",
+    "128": "icons/logo/logo128.png"
+  }
 } 
