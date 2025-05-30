@@ -1,0 +1,183 @@
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background-color: #2E2E2E; /* Dark background for the popup */
+  color: #E0E0E0; /* Light grey text */
+  margin: 0;
+  padding: 16px;
+  width: 220px; /* Adjust as needed */
+  box-sizing: border-box;
+  text-align: center;
+  border-radius: 8px; /* Rounded corners for the popup body if needed */
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Toggle Switch Styles */
+.toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: center; /* Center the switch and text */
+  background-color: #2E2E2E; /* Slightly lighter background for the toggle area */
+  padding: 10px;
+  border-radius: 25px; /* Fully rounded edges */
+  width: 150px; /* Fixed width for the toggle background */
+  height: 40px;   /* Fixed height */
+  box-sizing: border-box;
+  position: relative; /* For positioning the text inside */
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 100px; /* Width of the switch track */
+  height: 34px; /* Height of the switch track */
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #757575; /* Grey when off */
+  -webkit-transition: .4s;
+  transition: .4s;
+  border-radius: 34px; /* Rounded slider track */
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  -webkit-transition: .4s;
+  transition: .4s;
+  border-radius: 50%; /* Circular knob */
+}
+
+input:checked + .slider {
+  /* Gradient for 'On' state - adjust colors to match image */
+  background-image: linear-gradient(to right, #4FC3F7, #8E24AA);
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #2196F3;
+}
+
+input:checked + .slider:before {
+  -webkit-transform: translateX(65px);
+  -ms-transform: translateX(65px);
+  transform: translateX(65px);
+}
+
+#toggleStatusText {
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  position: absolute; /* Position text over the switch background */
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none; /* So it doesn't interfere with switch clicks */
+  z-index: 1; /* Ensure text is above the slider track but below the knob if needed */
+}
+
+/* Hide default browser text for the checkbox itself */
+.extension-on .toggle-container input:checked ~ #toggleStatusText {
+   /* Text should already be On by JS */
+}
+
+.extension-off .toggle-container #toggleStatusText {
+  /* Text should already be Off by JS */
+}
+
+/* When switch is on, the white knob covers the text. We need to ensure text is visible. */
+/* A simpler approach: the text is part of the toggle-container, not the switch itself. */
+/* We dynamically change text with JS. The image shows text over the colored part. */
+
+.toggle-container .slider + #toggleStatusText {
+    /* This selector is not quite right for the intended effect from image */
+    /* The text needs to be visually centered ON the colored part of the switch when ON */
+}
+
+/* The JS handles text change. For the visual like the image where "On" is on the colored part: */
+/* The text #toggleStatusText is centered in toggle-container. */
+/* When input:checked, .slider gets the gradient. The text is already there. */
+/* We need to make sure the knob doesn't obscure the text when it slides over. */
+/* The image implies the text is PART of the colored slider, not just overlaid. */
+/* This is tricky with standard CSS switches. The text is usually next to switch or knob. */
+
+/* Let's adjust #toggleStatusText to be within the colored part when ON */
+.extension-on #toggleStatusText {
+    color: white; /* Ensure it's visible on gradient */
+    /* Position it slightly to the left to appear on the colored part */
+    /* transform: translate(calc(-50% - 10px), -50%); */ /* This might need fine tuning */
+}
+
+.extension-off #toggleStatusText {
+    color: white;
+    /* Position it slightly to the right to appear on the grey part */
+    /* transform: translate(calc(-50% + 10px), -50%); */ /* This might need fine tuning */
+}
+
+/* Scan Hint */
+.scan-hint {
+  font-size: 13px;
+  color: #B0B0B0; /* Lighter grey for hint */
+}
+
+.scan-hint span {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+  background-color: #4A4A4A;
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #E0E0E0;
+  font-style: normal; /* Ensure it overrides italic if any global style */
+}
+
+/* Action Buttons */
+.actions-container {
+  display: flex;
+  justify-content: space-around; /* Distribute buttons evenly */
+  width: 100%;
+  padding-top: 10px; /* Space above buttons */
+  border-top: 1px solid #4A4A4A; /* Separator line */
+  margin-top: 10px;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  color: #B0B0B0;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease;
+}
+
+.action-btn:hover {
+  background-color: #5A5A5A;
+}
+
+.action-btn img {
+  width: 20px; /* Adjust icon size */
+  height: 20px;
+  display: block;
+  filter: invert(80%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(150%) contrast(70%); /* Make icons light grey */
+} 

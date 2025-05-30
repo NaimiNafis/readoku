@@ -35,5 +35,7 @@
       ]
     }
   ],
-  "action": {}
+  "action": {
+    "default_popup": "menu-popup/popup.html"
+  }
 } 

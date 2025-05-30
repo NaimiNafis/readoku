@@ -5,8 +5,83 @@ let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 150; // ms, adjust as needed
 let selectionActionButton = null; // Our new action button
 
+let isExtensionEnabled = true; // Assume enabled by default, will be updated
+
+// Function to initialize extension state and set up listeners
+async function initializeExtensionState() {
+  try {
+    const response = await chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" });
+    if (chrome.runtime.lastError) {
+      console.warn("Readoku: Could not get extension state on load, defaulting to enabled.", chrome.runtime.lastError.message);
+      isExtensionEnabled = true; // Default if background isn't ready or error
+    } else if (response && response.enabled !== undefined) {
+      isExtensionEnabled = response.enabled;
+      console.log("Readoku: Initial state loaded - ", isExtensionEnabled ? "Enabled" : "Disabled");
+    } else {
+      // This case might happen if the background script sends an empty or unexpected response.
+      console.warn("Readoku: Unexpected response for GET_EXTENSION_STATE, defaulting to enabled.");
+      isExtensionEnabled = true;
+    }
+  } catch (error) {
+    // This catch block handles errors specifically from the sendMessage promise itself (e.g., if the extension context is invalidated)
+    console.error("Readoku: Error sending GET_EXTENSION_STATE message:", error);
+    isExtensionEnabled = true; // Default to enabled in case of critical error
+  }
+  updateGlobalEventHandlers(); // Add or remove event listeners based on state
+}
+
+
+// Listen for state changes from the background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "EXTENSION_STATE_CHANGED") {
+    console.log("Readoku: State changed to", request.enabled ? "Enabled" : "Disabled");
+    isExtensionEnabled = request.enabled;
+    updateGlobalEventHandlers(); // Re-evaluate event listeners
+    if (!isExtensionEnabled) {
+      hidePopup(); // Hide any visible popups if extension is disabled
+      hideSelectionActionButton(); // Hide action button
+    }
+    sendResponse({ received: true }); // Acknowledge message
+  }
+  // Keep other message listeners if any, or ensure this doesn't interfere.
+  // If content.js only listens to EXTENSION_STATE_CHANGED, this is fine.
+  // If it listens to other messages, ensure they are correctly handled.
+  return true; // Important for async sendResponse, or if other listeners might respond.
+});
+
+// Function to add or remove event listeners based on the extension state
+function updateGlobalEventHandlers() {
+  // Remove all listeners first to avoid duplicates
+  document.removeEventListener('mousemove', handleMouseMove);
+  document.removeEventListener('keydown', handleKeyDown);
+  document.removeEventListener('keyup', handleKeyUp);
+  document.removeEventListener('mouseup', handleMouseUp);
+  document.removeEventListener('mousedown', handleMouseDown); // For hiding popup
+
+  if (isExtensionEnabled) {
+    console.log("Readoku: Enabling event listeners.");
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mousedown', handleMouseDown);
+  } else {
+    console.log("Readoku: Disabling event listeners.");
+    // Listeners are already removed, so nothing more to do here for removal.
+    // We might want to explicitly hide UI elements if they were visible.
+    hidePopup();
+    hideSelectionActionButton();
+  }
+}
+
+
+// Call initialization
+initializeExtensionState();
+
+
 // Function to create/get the popup
 function getOrCreatePopup() {
+  if (!isExtensionEnabled) return null; // Don't create if disabled
   if (!popup) {
     popup = document.createElement('div');
     popup.id = 'readoku-popup';
@@ -47,7 +122,9 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
 
 // Function to show translation
 function showTranslation(text, eventForPositioning) {
+  if (!isExtensionEnabled) return; // Do nothing if extension is disabled
   const localPopup = getOrCreatePopup();
+  if (!localPopup) return; // If popup creation was blocked by disabled state
   localPopup.innerHTML = '<div class="loader"></div>';
   localPopup.style.display = 'block';
   positionPopup(localPopup, 0, 0, eventForPositioning); // Initial position with loader
@@ -227,6 +304,7 @@ function getWordAtPoint(element, x, y) {
 
 // Function to get or create the selection action button
 function getOrCreateSelectionActionButton() {
+  if (!isExtensionEnabled) return null; // Don't create if disabled
   if (!selectionActionButton) {
     selectionActionButton = document.createElement('button');
     selectionActionButton.id = 'readoku-selection-action-btn';
@@ -247,7 +325,9 @@ function getOrCreateSelectionActionButton() {
 }
 
 function showSelectionActionButton(x, y) {
+  if (!isExtensionEnabled) return; // Do nothing if disabled
   const btn = getOrCreateSelectionActionButton();
+  if (!btn) return; // If button creation was blocked
   btn.style.left = `${x}px`;
   btn.style.top = `${y}px`;
   btn.style.display = 'block';
@@ -259,26 +339,19 @@ function hideSelectionActionButton() {
   }
 }
 
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Shift' && !event.repeat) {
-    isShiftHeld = true;
-    // No immediate action on keydown, wait for mousemove
-  }
-});
-
-document.addEventListener('keyup', (event) => {
-  if (event.key === 'Shift') {
-    isShiftHeld = false;
+// Debounced mousemove handler
+function handleMouseMove(event) {
+  if (!isExtensionEnabled || !isShiftHeld) {
+    // If shift is released or extension disabled, clear any pending hover detection
     if (hoverDetectionTimeout) {
       clearTimeout(hoverDetectionTimeout);
       hoverDetectionTimeout = null;
     }
-    lastHoveredWord = ""; 
+    // Optionally hide popup if shift is released and it's a hover popup
+    // Be careful here not to interfere with selection popups
+    // For now, let's assume hidePopup() is called appropriately elsewhere or not needed here.
+    return;
   }
-});
-
-document.addEventListener('mousemove', (event) => {
-  if (!isShiftHeld) return;
 
   if (hoverDetectionTimeout) {
     clearTimeout(hoverDetectionTimeout);
@@ -299,10 +372,37 @@ document.addEventListener('mousemove', (event) => {
       // For now, popups only hide on outside click.
     }
   }, HOVER_DEBOUNCE_DELAY);
-});
+}
 
-// NEW: mouseup listener for showing the selection action button
-document.addEventListener('mouseup', (event) => {
+function handleKeyDown(event) {
+  if (event.key === 'Shift') {
+    isShiftHeld = true;
+    // Potentially clear last hovered word to allow re-triggering on same word if shift was released and pressed again
+    // lastHoveredWord = ""; // Uncomment if this behavior is desired
+  }
+}
+
+function handleKeyUp(event) {
+  if (event.key === 'Shift') {
+    isShiftHeld = false;
+    // If shift is released, hide the hover-triggered popup
+    // Check if popup is visible and was likely triggered by hover (not selection)
+    // This logic might need refinement based on how selection popups are managed
+    if (popup && popup.style.display === 'block' /*&& !isSelectionPopup() for example */) {
+        // A more robust check might involve a flag for "hover popup" vs "selection popup"
+        // For now, a simple hide is fine, assuming selection popups are handled differently
+        // or that hiding them on shift-up is acceptable.
+      hidePopup();
+    }
+    if (hoverDetectionTimeout) { // Clear any pending hover detection
+        clearTimeout(hoverDetectionTimeout);
+        hoverDetectionTimeout = null;
+    }
+  }
+}
+
+function handleMouseUp(event) {
+  if (!isExtensionEnabled) return;
   // Don't show if shift is held (that's for hover translation)
   // Or if the click was on an existing popup or the selection action button itself.
   if (isShiftHeld || (popup && popup.contains(event.target)) || (selectionActionButton && selectionActionButton.contains(event.target))) {
@@ -337,27 +437,65 @@ document.addEventListener('mouseup', (event) => {
       hideSelectionActionButton();
     }
   }, 10); // Small delay
-});
+}
 
-// Universal mousedown listener for clicking outside to close popups AND the new action button
-document.addEventListener('mousedown', (event) => {
-  let clickedOnReadokuUI = false;
-  if (popup && popup.contains(event.target)) {
-    clickedOnReadokuUI = true;
-  }
-  if (selectionActionButton && selectionActionButton.contains(event.target)) {
-    clickedOnReadokuUI = true;
-  }
+function handleMouseDown(event) {
+  if (!isExtensionEnabled) return;
 
-  if (!clickedOnReadokuUI) {
-    if (popup && popup.style.display !== 'none') {
-      hidePopup();
+  // Hide popup if click is outside
+  // Check if the click is on the popup itself or the selection button
+  if (popup && popup.style.display === 'block' && !popup.contains(event.target)) {
+    // If a selection action button exists and the click is on it, let its own handler manage the popup
+    if (selectionActionButton && selectionActionButton.contains(event.target)) {
+      return;
     }
-    if (selectionActionButton && selectionActionButton.style.display !== 'none') {
+    hidePopup();
+  }
+
+  // Hide selection action button if click is outside
+  if (selectionActionButton && selectionActionButton.style.display === 'block' && !selectionActionButton.contains(event.target)) {
+    // Also, ensure the click is not on the popup, as clicking the popup might be an action (e.g. copy)
+    // and we don't want to hide the button then.
+    // This condition can be tricky. If clicking an action in the popup should also hide the button,
+    // then this is fine. If not, more specific logic is needed.
+    if (popup && popup.contains(event.target)) {
+        // Click was inside the main translation popup, maybe don't hide the button yet
+        // Or, maybe we always hide it if the click isn't on the button itself.
+        // For now, let's assume we hide it if the click is not on the button.
+    } else {
       hideSelectionActionButton();
     }
   }
-});
+}
+
+// Initialize event listeners based on the initial state
+// This will be called after fetching the initial state
+// initializeExtensionState(); // This is now called at the end of its own definition.
+
+// Ensure that all functions that trigger UI (showTranslation, showSelectionActionButton)
+// and the event handlers (handleMouseMove, handleMouseUp, handleMouseDown, handleKeyDown, handleKeyUp)
+// check `isExtensionEnabled` at the beginning and return early if false.
+// Also, when the state changes to disabled, actively hide any visible UI elements.
+
+/*
+Make sure to add the `isExtensionEnabled` check at the beginning of:
+- getOrCreatePopup() - DONE
+- showTranslation() - DONE
+- getOrCreateSelectionActionButton() - DONE
+- showSelectionActionButton() - DONE
+- handleMouseMove() - DONE (combined with isShiftHeld)
+- handleMouseUp() - DONE
+- handleMouseDown() - DONE
+
+And the following might need adjustment or checking:
+- handleKeyDown(event): This sets `isShiftHeld`. If the extension is disabled, `isShiftHeld` might still become true.
+  However, `handleMouseMove` checks both `isExtensionEnabled` AND `isShiftHeld`, so it should be okay.
+  No direct UI is shown by handleKeyDown.
+- handleKeyUp(event): This sets `isShiftHeld` to false and hides the popup.
+  If the extension is disabled, `isExtensionEnabled` will be false.
+  The `hidePopup()` call in `handleKeyUp` is fine even if disabled.
+  The `clearTimeout(hoverDetectionTimeout)` is also fine.
+*/
 
 // TODO: Add option to pin the popup
 // TODO: More robust word detection, especially for complex DOM structures or if caretPositionFromPoint is not well-supported.

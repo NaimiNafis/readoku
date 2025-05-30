@@ -25,8 +25,37 @@ fetch(chrome.runtime.getURL('dictionary.json'))
 
 // Removed context menu creation and listener logic
 
+chrome.runtime.onInstalled.addListener(() => {
+  // Set an initial state when the extension is installed or updated
+  // Default to enabled (true)
+  chrome.storage.local.get(['extensionEnabled'], function(result) {
+    if (result.extensionEnabled === undefined) {
+      chrome.storage.local.set({ extensionEnabled: true });
+      console.log("Extension enabled by default on installation.");
+    }
+  });
+});
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === "translate") {
+  if (request.type === "TOGGLE_EXTENSION") {
+    const enabled = request.enabled;
+    console.log(`Extension state changed to: ${enabled ? 'Enabled' : 'Disabled'}`);
+    // Notify all active content scripts of the change
+    chrome.tabs.query({}, function(tabs) { // Query all tabs
+      for (let tab of tabs) {
+        if (tab.id) {
+          chrome.tabs.sendMessage(tab.id, { type: "EXTENSION_STATE_CHANGED", enabled: enabled }).catch(error => {
+            // Catch errors if content script isn't injected or tab is not accessible
+            if (error.message !== "Could not establish connection. Receiving end does not exist.") {
+              // console.warn(`Could not send message to tab ${tab.id}: ${error.message}`);
+            }
+          });
+        }
+      }
+    });
+    sendResponse({ success: true });
+    return true; // Keep message channel open for async response if needed, though not strictly here
+  } else if (request.action === "translate") {
     const text = request.text.toLowerCase(); // Normalize text
 
     // 1. Check cache
@@ -82,6 +111,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     });
 
     return true; // Indicates that the response is sent asynchronously
+  } else if (request.action === "GET_EXTENSION_STATE") {
+    chrome.storage.local.get(['extensionEnabled'], function (result) {
+      const isEnabled = result.extensionEnabled === undefined ? true : result.extensionEnabled;
+      sendResponse({ enabled: isEnabled });
+    });
+    return true; // Indicates asynchronous response
   }
 });
 

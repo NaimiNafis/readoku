@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Readoku</title>
+  <link rel="stylesheet" type="text/css" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="toggle-container">
+      <label class="switch">
+        <input type="checkbox" id="toggleSwitch">
+        <span class="slider round"></span>
+      </label>
+      <span id="toggleStatusText">Off</span>
+    </div>
+    <div class="scan-hint">
+      Hold <span>Shift</span> to scan
+    </div>
+    <div class="actions-container">
+      <button id="settingsBtn" class="action-btn">
+        <img src="../icons/settings.png" alt="Settings">
+      </button>
+      <button id="searchBtn" class="action-btn">
+        <img src="../icons/search.png" alt="Search">
+      </button>
+      <button id="helpBtn" class="action-btn">
+        <img src="../icons/help.png" alt="Help">
+      </button>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 
