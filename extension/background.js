@@ -46,8 +46,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (tab.id) {
           chrome.tabs.sendMessage(tab.id, { type: "EXTENSION_STATE_CHANGED", enabled: enabled }).catch(error => {
             // Catch errors if content script isn't injected or tab is not accessible
-            if (error.message !== "Could not establish connection. Receiving end does not exist.") {
-              // console.warn(`Could not send message to tab ${tab.id}: ${error.message}`);
+            if (error.message !== "Could not establish connection. Receiving end does not exist." && !error.message.includes("The message port closed before a response was received.")) {
+              console.warn(`Readoku (background): Could not send EXTENSION_STATE_CHANGED to tab ${tab.id}: ${error.message}`);
             }
           });
         }

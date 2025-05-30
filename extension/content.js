@@ -4,30 +4,24 @@ let lastHoveredWord = ""; // To avoid redundant processing for the same word
 let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 150; // ms, adjust as needed
 let selectionActionButton = null; // Our new action button
-
 let isExtensionEnabled = true; // Assume enabled by default, will be updated
 
 // Function to initialize extension state and set up listeners
-async function initializeExtensionState() {
-  try {
-    const response = await chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" });
+function initializeExtensionState() {
+  chrome.runtime.sendMessage({ action: "GET_EXTENSION_STATE" }, function(response) {
     if (chrome.runtime.lastError) {
-      console.warn("Readoku: Could not get extension state on load, defaulting to enabled.", chrome.runtime.lastError.message);
+      console.warn("Readoku (content.js): Could not get extension state on load. Error:", chrome.runtime.lastError.message, "Defaulting to enabled.");
       isExtensionEnabled = true; // Default if background isn't ready or error
     } else if (response && response.enabled !== undefined) {
       isExtensionEnabled = response.enabled;
-      console.log("Readoku: Initial state loaded - ", isExtensionEnabled ? "Enabled" : "Disabled");
+      console.log("Readoku (content.js): Initial state loaded - ", isExtensionEnabled ? "Enabled" : "Disabled");
     } else {
-      // This case might happen if the background script sends an empty or unexpected response.
-      console.warn("Readoku: Unexpected response for GET_EXTENSION_STATE, defaulting to enabled.");
-      isExtensionEnabled = true;
+      console.warn("Readoku (content.js): Unexpected or no response for GET_EXTENSION_STATE. Defaulting to enabled.");
+      isExtensionEnabled = true; // Default in case of unexpected response
     }
-  } catch (error) {
-    // This catch block handles errors specifically from the sendMessage promise itself (e.g., if the extension context is invalidated)
-    console.error("Readoku: Error sending GET_EXTENSION_STATE message:", error);
-    isExtensionEnabled = true; // Default to enabled in case of critical error
-  }
-  updateGlobalEventHandlers(); // Add or remove event listeners based on state
+    // Ensure event handlers are updated regardless of how state was determined
+    updateGlobalEventHandlers();
+  });
 }
 
 

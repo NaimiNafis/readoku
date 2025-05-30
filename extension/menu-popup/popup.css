@@ -10,6 +10,26 @@ body {
   border-radius: 8px; /* Rounded corners for the popup body if needed */
 }
 
+/* Header styles */
+.header-container {
+  display: flex;
+  align-items: center; /* Vertically align logo and text */
+  justify-content: center; /* Center the group if it's narrower than the container */
+  gap: 8px; /* Space between logo and text */
+  margin-bottom: 0px; /* Space below the header */
+}
+
+#popupLogo {
+  width: 32px; /* Adjust size as needed */
+  height: 32px;
+}
+
+#popupTitle {
+  font-family: 'Lobster', cursive;
+  font-size: 24px; /* Adjust size as needed */
+  color: #E0E0E0; /* Same as body text or choose a specific color */
+}
+
 .container {
   display: flex;
   flex-direction: column;
@@ -97,31 +117,6 @@ input:checked + .slider:before {
   pointer-events: none; /* So it doesn't interfere with switch clicks */
   z-index: 1; /* Ensure text is above the slider track but below the knob if needed */
 }
-
-/* Hide default browser text for the checkbox itself */
-.extension-on .toggle-container input:checked ~ #toggleStatusText {
-   /* Text should already be On by JS */
-}
-
-.extension-off .toggle-container #toggleStatusText {
-  /* Text should already be Off by JS */
-}
-
-/* When switch is on, the white knob covers the text. We need to ensure text is visible. */
-/* A simpler approach: the text is part of the toggle-container, not the switch itself. */
-/* We dynamically change text with JS. The image shows text over the colored part. */
-
-.toggle-container .slider + #toggleStatusText {
-    /* This selector is not quite right for the intended effect from image */
-    /* The text needs to be visually centered ON the colored part of the switch when ON */
-}
-
-/* The JS handles text change. For the visual like the image where "On" is on the colored part: */
-/* The text #toggleStatusText is centered in toggle-container. */
-/* When input:checked, .slider gets the gradient. The text is already there. */
-/* We need to make sure the knob doesn't obscure the text when it slides over. */
-/* The image implies the text is PART of the colored slider, not just overlaid. */
-/* This is tricky with standard CSS switches. The text is usually next to switch or knob. */
 
 /* Let's adjust #toggleStatusText to be within the colored part when ON */
 .extension-on #toggleStatusText {
