@@ -28,7 +28,7 @@ fetch(chrome.runtime.getURL('dictionary.json'))
 chrome.runtime.onInstalled.addListener(() => {
   // Set an initial state when the extension is installed or updated
   // Default to enabled (true)
-  chrome.storage.local.get(['extensionEnabled'], function(result) {
+  chrome.storage.local.get(['extensionEnabled'], function (result) {
     if (result.extensionEnabled === undefined) {
       chrome.storage.local.set({ extensionEnabled: true });
       console.log("Extension enabled by default on installation.");
@@ -41,7 +41,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const enabled = request.enabled;
     console.log(`Extension state changed to: ${enabled ? 'Enabled' : 'Disabled'}`);
     // Notify all active content scripts of the change
-    chrome.tabs.query({}, function(tabs) { // Query all tabs
+    chrome.tabs.query({}, function (tabs) { // Query all tabs
       for (let tab of tabs) {
         if (tab.id) {
           chrome.tabs.sendMessage(tab.id, { type: "EXTENSION_STATE_CHANGED", enabled: enabled }).catch(error => {
@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.log("Cache hit for:", text);
       // Cache stores full object for local, string for proxy
       sendResponse({ translation: cache[text].data, source: cache[text].source_type });
-      return true; 
+      return true;
     }
 
     // 2. Check local dictionary (for single words)
@@ -95,36 +95,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       },
       body: JSON.stringify(requestBody)
     })
-    .then(response => {
+      .then(response => {
         if (!response.ok) {
-            // Attempt to parse error from backend if available, otherwise use statusText
-            return response.json().catch(() => null).then(errorBody => {
-                const errorMessage = errorBody?.errorMessage || errorBody?.error || response.statusText;
-                throw new Error(`Proxy request failed: ${response.status} ${errorMessage}`);
-            });
+          // Attempt to parse error from backend if available, otherwise use statusText
+          return response.json().catch(() => null).then(errorBody => {
+            const errorMessage = errorBody?.errorMessage || errorBody?.error || response.statusText;
+            throw new Error(`Proxy request failed: ${response.status} ${errorMessage}`);
+          });
         }
         return response.json();
-    })
-    .then(data => {
-      // Example: Adjust based on the actual response structure from gemini's proxy
-      if (data.translatedText) {
-        cache[request.text.toLowerCase()] = { data: data.translatedText, timestamp: Date.now(), source_type: 'gemini' };
-        sendResponse({ translation: data.translatedText, source: 'gemini' });
-      } else if (data.errorMessage) {
-        console.error("Error from Gemini proxy:", data.errorMessage);
-        sendResponse({ error: data.errorMessage, source: 'gemini' });
-      } else if (data.error) { // Fallback for a generic error field
-        console.error("Error from Gemini proxy (generic):", data.error);
-        sendResponse({ error: data.error, source: 'gemini' });
-      } else {
-        console.error("Invalid or unexpected response structure from Gemini proxy:", data);
-        throw new Error("Invalid response from Gemini proxy");
-      }
-    })
-    .catch(error => {
-      console.error("Error calling Gemini proxy:", error);
-      sendResponse({ error: error.message || "Failed to translate via Gemini proxy", source: 'gemini' });
-    });
+      })
+      .then(data => {
+        // Example: Adjust based on the actual response structure from gemini's proxy
+        if (data.translatedText) {
+          cache[request.text.toLowerCase()] = { data: data.translatedText, timestamp: Date.now(), source_type: 'gemini' };
+          sendResponse({ translation: data.translatedText, source: 'gemini' });
+        } else if (data.errorMessage) {
+          console.error("Error from Gemini proxy:", data.errorMessage);
+          sendResponse({ error: data.errorMessage, source: 'gemini' });
+        } else if (data.error) { // Fallback for a generic error field
+          console.error("Error from Gemini proxy (generic):", data.error);
+          sendResponse({ error: data.error, source: 'gemini' });
+        } else {
+          console.error("Invalid or unexpected response structure from Gemini proxy:", data);
+          throw new Error("Invalid response from Gemini proxy");
+        }
+      })
+      .catch(error => {
+        console.error("Error calling Gemini proxy:", error);
+        sendResponse({ error: error.message || "Failed to translate via Gemini proxy", source: 'gemini' });
+      });
 
     return true; // Indicates that the response is sent asynchronously
   } else if (request.action === "GET_EXTENSION_STATE") {
