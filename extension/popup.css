@@ -9,9 +9,8 @@
   max-width: 600px; /* Max width it can be resized to */
   min-width: 200px; /* Min width it can be resized to */
   height: auto;    /* Let content determine height initially */
-  min-height: 100px; /* Smaller min-height */
-  max-height: 400px; /* Max height before scrolling kicks in forcefully */
-  resize: both;      /* Allow both horizontal and vertical resize */
+  min-height: 200px; /* Smaller min-height */
+  resize: vertical;      /* Allow both horizontal and vertical resize */
   overflow: auto;    /* Use `auto` for both axes if `resize: both` */
   border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
