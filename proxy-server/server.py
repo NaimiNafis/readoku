@@ -31,50 +31,59 @@ GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemin
 def translate():
     try:
         data = request.json
-        prompt = data.get("prompt", "")
+        # The 'prompt' field from the client will now be the core text (e.g., search query)
+        query_text = data.get("prompt", "") 
         translation_mode = data.get("translationMode", "word")
 
-        if not prompt:
-            return jsonify({"error": "No prompt provided"}), 400
+        if not query_text:
+            return jsonify({"error": "No prompt text provided"}), 400
 
-        cache_key = (prompt, translation_mode)
+        cache_key = (query_text, translation_mode)
         if cache_key in translation_cache:
-            logger.info(f"Cache hit for prompt: {prompt}")
+            logger.info(f"Cache hit for: {query_text}, mode: {translation_mode}")
             return jsonify(translation_cache[cache_key])
-        logger.info(f"Cache miss for prompt: {prompt}")
+        logger.info(f"Cache miss for: {query_text}, mode: {translation_mode}")
 
-        prompt_text = ""
+        prompt_to_gemini = ""
         payload = {}
 
         if translation_mode == "word":
-            prompt_text = f"""Translate the Japanese word "{prompt}" and provide:
-1. Reading in Japanese (e.g., 漢字)
-2. Romaji reading (e.g., kanji)
-3. Part of speech (e.g., noun, verb)
-4. English definition
-5. Japanese explanation (simple, if possible)
-6. 1 example sentence in English (simple, if possible)
-7. 1 sentences same as 6. in Japanese (simple, if possible)
-Format response as JSON with these keys: reading_jp, reading_romaji, part_of_speech, definition_en, explanation_jp, example_en, example_jp"""
+            prompt_to_gemini = f'''Provide a detailed dictionary entry for the Japanese word "{query_text}".
+Include the following information as a JSON object with the specified keys:
+1.  "reading_jp": The reading of the word in Japanese (e.g., Kanji, Hiragana, or Katakana).
+2.  "reading_romaji": The Romaji reading (e.g., "kanji").
+3.  "part_of_speech": The part of speech (e.g., "noun", "verb", "adjective").
+4.  "definition_en": A concise English definition.
+5.  "explanation_jp": A simple explanation in Japanese, if possible.
+6.  "example_en": A simple example sentence in English.
+7.  "example_jp": The Japanese translation of the example sentence.
+Ensure the entire output is a single, valid JSON object.'''
             payload = {
-                "contents": [{"parts": [{"text": prompt_text}]}],
+                "contents": [{"parts": [{"text": prompt_to_gemini}]}],
                 "generationConfig": { "responseMimeType": "application/json" }
             }
         elif translation_mode == "phrase":
-            prompt_text = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{prompt}"'
+            prompt_to_gemini = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{query_text}"'
             payload = {
-                "contents": [{"parts": [{"text": prompt_text}]}]
+                "contents": [{"parts": [{"text": prompt_to_gemini}]}]
             }
         elif translation_mode == "dictionaryLookup":
-            prompt_text = prompt
+            # Prompt is now defined on the server side for this mode
+            prompt_to_gemini = f'''The user is a Japanese speaker learning English. For the English term "{query_text}", provide a detailed dictionary-style entry primarily in JAPANESE. Include:
+1. The English term itself (key: term_en).
+2. Katakana reading of the English term, if applicable (key: reading_katakana).
+3. Detailed Japanese definition(s) or explanation(s) of the English term (key: explanation_jp). Use clear and simple Japanese suitable for learners.
+4. Part(s) of speech, preferably in Japanese (e.g., 名詞, 動詞) or English if Japanese is not natural (key: part_of_speech).
+5. Multiple example sentences demonstrating the usage of the English term, each with a natural Japanese translation (key: examples, as an array of objects with "en" and "jp" string properties).
+Format the entire response as a single, valid JSON object. Ensure all text values are properly escaped for JSON.'''
             payload = {
-                "contents": [{"parts": [{"text": prompt_text}]}],
+                "contents": [{"parts": [{"text": prompt_to_gemini}]}],
                 "generationConfig": { "responseMimeType": "application/json" }
             }
-        else:
-            prompt_text = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{prompt}"'
+        else: # Default fallback (though client should always specify a mode)
+            prompt_to_gemini = f'Translate the following text to Japanese: "{query_text}"'
             payload = {
-                "contents": [{"parts": [{"text": prompt_text}]}]
+                "contents": [{"parts": [{"text": prompt_to_gemini}]}]
             }
 
         response = gemini_session.post(

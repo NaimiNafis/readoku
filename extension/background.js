@@ -156,19 +156,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    console.log("Calling Gemini proxy for dictionary search (EN->JA focused):", searchQuery);
+    console.log("Calling Gemini proxy for dictionary search (EN->JA focused, server-defined prompt):", searchQuery);
     const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; 
 
     const requestBody = {
-      // Updated prompt for Japanese learners of English
-      prompt: `The user is a Japanese speaker learning English. For the English term "${searchQuery}", provide a detailed dictionary-style entry primarily in JAPANESE. Include:
-1. The English term itself (key: term_en).
-2. Katakana reading of the English term, if applicable (key: reading_katakana).
-3. Detailed Japanese definition(s) or explanation(s) of the English term (key: explanation_jp). Use clear and simple Japanese suitable for learners.
-4. Part(s) of speech, preferably in Japanese (e.g., 名詞, 動詞) or English if Japanese is not natural (key: part_of_speech).
-5. Multiple example sentences demonstrating the usage of the English term, each with a natural Japanese translation (key: examples, as an array of objects with "en" and "jp" string properties).
-Format the entire response as a single, valid JSON object. Ensure all text values are properly escaped for JSON.`, 
-      translationMode: 'dictionaryLookup' // Server uses this to expect JSON
+      prompt: searchQuery, // Only send the query text
+      translationMode: 'dictionaryLookup' // Server uses this to select the correct detailed prompt and expect JSON
     };
 
     fetch(geminiProxyUrl, {
