@@ -1,10 +1,22 @@
-import requests
-from flask import Flask, jsonify, request
 import json
+import logging
 import os
+
+import requests
+from cachetools import LRUCache
+from dotenv import load_dotenv
+from flask import Flask, jsonify, request
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+load_dotenv()
 
 app = Flask(__name__)
 
+gemini_session = requests.Session()
+translation_cache = LRUCache(maxsize=500)
+GEMINI_API_TIMEOUT = 10
 # Load API key from environment variable
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
@@ -25,56 +37,44 @@ def translate():
         if not prompt:
             return jsonify({"error": "No prompt provided"}), 400
 
+        cache_key = (prompt, translation_mode)
+        if cache_key in translation_cache:
+            logger.info(f"Cache hit for prompt: {prompt}")
+            return jsonify(translation_cache[cache_key])
+        logger.info(f"Cache miss for prompt: {prompt}")
+
+        prompt_text = ""
+        payload = {}
+
         if translation_mode == "word":
             prompt_text = f"""Translate the Japanese word "{prompt}" and provide:
-1. Reading in hiragana/katakana
-2. Romaji reading
-3. Part of speech
+1. Reading in Japanese (e.g., 漢字)
+2. Romaji reading (e.g., kanji)
+3. Part of speech (e.g., noun, verb)
 4. English definition
-5. Japanese explanation
-6. Example sentences (English and Japanese)
-Format response as JSON with these keys: reading_jp, reading_romaji, part_of_speech, definition_en, explanation_jp, example_en, example_jp"""
+5. Japanese explanation (simple, if possible)
+6. 1 example sentence in English (simple, if possible)
+7. 1 sentences same as 6. in Japanese (simple, if possible)
+Format the entire response as JSON with these keys: reading_jp, reading_romaji, part_of_speech, definition_en, explanation_jp, example_en, example_jp"""
             payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt_text}
-                        ]
-                    }
-                ],
-                "generationConfig": {
-                    "responseMimeType": "application/json"
-                }
+                "contents": [{"parts": [{"text": prompt_text}]}],
+                "generationConfig": {"responseMimeType": "application/json"},
             }
         elif translation_mode == "phrase":
             # This prompt will attempt to translate the highlighted text to Japanese.
             prompt_text = f'Translate the following text to Japanese: "{prompt}"'
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt_text}
-                        ]
-                    }
-                ]
-            }
-        else: # Default or unknown mode, treat as simple phrase translation to Japanese
+            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+        else:  # Default or unknown mode, treat as simple phrase translation to Japanese
             prompt_text = f'Translate the following text to Japanese: "{prompt}"'
-            payload = {
-                "contents": [
-                    {
-                        "parts": [
-                            {"text": prompt_text}
-                        ]
-                    }
-                ]
-            }
+            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
 
-        response = requests.post(GEMINI_API_URL, json=payload)
+        response = gemini_session.post(
+            GEMINI_API_URL, json=payload, timeout=GEMINI_API_TIMEOUT
+        )
         response.raise_for_status()
 
         gemini_data = response.json()
-        
+
         # The actual content (which might be a JSON string or plain text)
         # is within the 'text' field of the first part of the first candidate.
         raw_text_from_gemini = (
@@ -93,17 +93,33 @@ Format response as JSON with these keys: reading_jp, reading_romaji, part_of_spe
                     # Flask's jsonify will then convert this dict to a JSON response.
                     return jsonify(parsed_translation_object)
                 except json.JSONDecodeError as e:
-                    app.logger.error(f"Gemini returned invalid JSON for word translation: {e}")
+                    app.logger.error(
+                        f"Gemini returned invalid JSON for word translation: {e}"
+                    )
                     app.logger.error(f"Raw text from Gemini: {raw_text_from_gemini}")
-                    return jsonify({"error": "Gemini returned invalid JSON for word translation", "details": str(e), "raw_gemini_text": raw_text_from_gemini}), 502
+                    return (
+                        jsonify(
+                            {
+                                "error": "Gemini returned invalid JSON for word translation",
+                                "details": str(e),
+                                "raw_gemini_text": raw_text_from_gemini,
+                            }
+                        ),
+                        502,
+                    )
             else:  # "phrase" mode
                 # For "phrase" mode, we expect plain text.
                 return jsonify({"translatedText": raw_text_from_gemini})
         else:
-            app.logger.error(f"No translation text received from Gemini parts. Raw Gemini response: {gemini_data}")
+            app.logger.error(
+                f"No translation text received from Gemini parts. Raw Gemini response: {gemini_data}"
+            )
             return (
                 jsonify(
-                    {"error": "No translation text received from Gemini parts", "raw_gemini_response": gemini_data}
+                    {
+                        "error": "No translation text received from Gemini parts",
+                        "raw_gemini_response": gemini_data,
+                    }
                 ),
                 502,
             )
@@ -111,7 +127,10 @@ Format response as JSON with these keys: reading_jp, reading_romaji, part_of_spe
     except requests.exceptions.HTTPError as http_err:
         app.logger.error(f"HTTP error occurred: {http_err}")
         app.logger.error(f"Response content: {response.content}")
-        return jsonify({"error": str(http_err), "response_content": response.text}), response.status_code
+        return (
+            jsonify({"error": str(http_err), "response_content": response.text}),
+            response.status_code,
+        )
     except Exception as e:
         app.logger.error(f"An unexpected error occurred: {e}")
         return jsonify({"error": str(e)}), 500
