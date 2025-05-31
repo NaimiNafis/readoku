@@ -92,23 +92,49 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
   let initialTop = pTop;
 
   if (mouseEvent) {
-    initialLeft = mouseEvent.clientX + 15;
-    initialTop = mouseEvent.clientY + 15;
+    initialLeft = mouseEvent.clientX + window.scrollX + 15;
+    initialTop = mouseEvent.clientY + window.scrollY + 15;
+  }else{
+    initialLeft = pLeft;
+    initialTop = pTop;
   }
   
-  const popupRect = currentPopup.getBoundingClientRect();
+  // const popupRect = currentPopup.getBoundingClientRect();
+  const popupWidth = currentPopup.offsetWidth;
+  const popupHeight = currentPopup.offsetHeight;
+
   let finalLeft = initialLeft;
   let finalTop = initialTop;
 
   // Adjust if out of viewport
-  if (finalLeft + popupRect.width > window.innerWidth) {
-    finalLeft = window.innerWidth - popupRect.width - 10;
+  // if (finalLeft + popupRect.width > window.innerWidth) {
+  //   finalLeft = window.innerWidth - popupRect.width - 10;
+  // }
+  // if (finalTop + popupRect.height > window.innerHeight) {
+  //   finalTop = window.innerHeight - popupRect.height - 10;
+  // }
+
+  // Adjust if out of right edge of the current viewport
+  if (finalLeft + popupWidth > window.scrollX + window.innerWidth - 10) {
+    finalLeft = window.scrollX + window.innerWidth - popupWidth - 10;
   }
-  if (finalTop + popupRect.height > window.innerHeight) {
-    finalTop = window.innerHeight - popupRect.height - 10;
+  // Adjust if out of bottom edge of the current viewport
+  if (finalTop + popupHeight > window.scrollY + window.innerHeight - 10) {
+    finalTop = window.scrollY + window.innerHeight - popupHeight - 10;
   }
+  // Adjust if out of left edge of the current viewport
+  if (finalLeft < window.scrollX + 10) {
+    finalLeft = window.scrollX + 10;
+  }
+  // Adjust if out of top edge of the current viewport
+  if (finalTop < window.scrollY + 10) {
+    finalTop = window.scrollY + 10;
+  }
+
   if (finalLeft < 0) finalLeft = 10;
   if (finalTop < 0) finalTop = 10;
+
+
 
   currentPopup.style.left = `${finalLeft}px`;
   currentPopup.style.top = `${finalTop}px`;
