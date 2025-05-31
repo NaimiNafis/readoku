@@ -1,0 +1,280 @@
+{
+    "meta": {
+        "status": 200
+    },
+    "data": [
+        {
+            "slug": "ソフトウェア",
+            "is_common": true,
+            "tags": [],
+            "jlpt": [],
+            "japanese": [
+                {
+                    "reading": "ソフトウェア"
+                },
+                {
+                    "reading": "ソフトウエア"
+                }
+            ],
+            "senses": [
+                {
+                    "english_definitions": [
+                        "software"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [
+                        "Computing"
+                    ],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "Software"
+                    ],
+                    "parts_of_speech": [
+                        "Wikipedia definition"
+                    ],
+                    "links": [
+                        {
+                            "text": "Read “Software” on English Wikipedia",
+                            "url": "http://en.wikipedia.org/wiki/Software?oldid=495134371"
+                        },
+                        {
+                            "text": "Read “ソフトウェア” on Japanese Wikipedia",
+                            "url": "http://ja.wikipedia.org/wiki/ソフトウェア?oldid=42721717"
+                        }
+                    ],
+                    "tags": [],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [],
+                    "source": [],
+                    "info": [],
+                    "sentences": []
+                }
+            ],
+            "attribution": {
+                "jmdict": true,
+                "jmnedict": false,
+                "dbpedia": "http://dbpedia.org/resource/Software"
+            }
+        },
+        {
+            "slug": "ソフト",
+            "is_common": true,
+            "tags": [],
+            "jlpt": [
+                "jlpt-n4"
+            ],
+            "japanese": [
+                {
+                    "reading": "ソフト"
+                }
+            ],
+            "senses": [
+                {
+                    "english_definitions": [
+                        "soft"
+                    ],
+                    "parts_of_speech": [
+                        "Na-adjective (keiyodoshi)",
+                        "Noun which may take the genitive case particle 'no'"
+                    ],
+                    "links": [],
+                    "tags": [],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [
+                        "ハード"
+                    ],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "software"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [
+                        "Computing",
+                        "Abbreviation"
+                    ],
+                    "restrictions": [],
+                    "see_also": [
+                        "ソフトウエア"
+                    ],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "soft hat",
+                        "felt hat"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [
+                        "Abbreviation"
+                    ],
+                    "restrictions": [],
+                    "see_also": [
+                        "ソフト帽"
+                    ],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "soft serve ice cream"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [
+                        "Abbreviation"
+                    ],
+                    "restrictions": [],
+                    "see_also": [
+                        "ソフトクリーム"
+                    ],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "softball"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [
+                        "Abbreviation"
+                    ],
+                    "restrictions": [],
+                    "see_also": [
+                        "ソフトボール"
+                    ],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "Soft"
+                    ],
+                    "parts_of_speech": [
+                        "Wikipedia definition"
+                    ],
+                    "links": [
+                        {
+                            "text": "Read “Soft” on English Wikipedia",
+                            "url": "http://en.wikipedia.org/wiki/Soft?oldid=475811130"
+                        },
+                        {
+                            "text": "Read “ソフト” on Japanese Wikipedia",
+                            "url": "http://ja.wikipedia.org/wiki/ソフト?oldid=38777876"
+                        }
+                    ],
+                    "tags": [],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [],
+                    "source": [],
+                    "info": [],
+                    "sentences": []
+                }
+            ],
+            "attribution": {
+                "jmdict": true,
+                "jmnedict": false,
+                "dbpedia": "http://dbpedia.org/resource/Soft"
+            }
+        },
+        {
+            "slug": "アプリケーション",
+            "is_common": true,
+            "tags": [],
+            "jlpt": [],
+            "japanese": [
+                {
+                    "reading": "アプリケーション"
+                }
+            ],
+            "senses": [
+                {
+                    "english_definitions": [
+                        "application",
+                        "application software"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [
+                        "Computing"
+                    ],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "application",
+                        "putting into use"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                },
+                {
+                    "english_definitions": [
+                        "application",
+                        "request",
+                        "petition"
+                    ],
+                    "parts_of_speech": [
+                        "Noun"
+                    ],
+                    "links": [],
+                    "tags": [],
+                    "restrictions": [],
+                    "see_also": [],
+                    "antonyms": [],
+                    "source": [],
+                    "info": []
+                }
+            ],
+            "attribution": {
+                "jmdict": true,
+                "jmnedict": false,
+                "dbpedia": false
+            }
+        }
+    ]
+}

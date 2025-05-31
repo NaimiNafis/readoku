@@ -1,47 +1,45 @@
-import json
-import os # Added os module
+import json 
+import re
 
-# Get the directory of the current script
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# TODO: Implement actual EJDict.txt parsing logic
-# This is a placeholder and assumes a simple tab-separated format
-# Example EJDict.txt line: word\tdefinition
+def parse_entry(key, value):
+    # Extract Japanese (kanji or katakana/hiragana) using regex
+    jp_match = re.findall(r'[一-龯ぁ-んァ-ヴー]+', value)
+    jp_reading = jp_match[0] if jp_match else None
 
-def convert_ejdict_to_json(input_file_path, output_file_path):
-    dictionary = {}
-    try:
-        with open(input_file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                parts = line.strip().split('\t')
-                if len(parts) == 2:
-                    word, definition = parts
-                    dictionary[word] = definition
-    except FileNotFoundError:
-        print(f"Error: {input_file_path} not found. Please create it with sample data.")
-        # Create a dummy file for demo purposes
-        with open(input_file_path, 'w', encoding='utf-8') as f:
-            f.write("hello\tこんにちは\n")
-            f.write("world\t世界\n")
-        print(f"Created dummy {input_file_path} with sample data.")
-        # Re-run with dummy data
-        # This recursive call might be problematic if dummy creation also fails.
-        # Consider a flag or a different approach for robustness.
-        return convert_ejdict_to_json(input_file_path, output_file_path)
+    # Determine part of speech from symbols
+    if '{形}' in value:
+        pos = "adjective"
+    elif '{副}' in value:
+        pos = "adverb"
+    elif '〈C〉' in value or '〈U〉' in value:
+        pos = "noun"
+    elif 'の短縮形' in value:
+        pos = "contraction"
+    else:
+        pos = "unknown"
 
-    # Ensure the output directory exists
-    output_dir = os.path.dirname(output_file_path)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # English definition: take the first part before any Japanese
+    en_def = value.split('／')[0].split('(')[0].strip()
 
-    with open(output_file_path, 'w', encoding='utf-8') as f:
-        json.dump(dictionary, f, ensure_ascii=False, indent=2)
-    print(f"Successfully converted {input_file_path} to {output_file_path}")
+    return {
+        "reading_jp": jp_reading,
+        "reading_romaji": None,
+        "part_of_speech": pos,
+        "definition_en": en_def,
+        "explanation_jp": None,
+        "example_en": None,
+        "example_jp": None,
+        "audio_url": None
+    }
+with open("./scripts/ejdict.json", "r", encoding="utf-8") as f:
+    data = json.load(f)
 
-if __name__ == '__main__':
-    # Construct paths relative to the script directory
-    ejdict_txt_path = os.path.join(SCRIPT_DIR, 'EJDict.txt')
-    dictionary_json_path = os.path.join(SCRIPT_DIR, '..', 'extension', 'dictionary.json')
-    convert_ejdict_to_json(ejdict_txt_path, dictionary_json_path)
+final_dict = {}
 
-# TODO: Add more sophisticated text processing (e.g., handling multiple definitions, example sentences) 
+for k, v in data.items():
+    final_dict[k] = parse_entry(k, v)
+
+
+with open("./scripts/structured_dict.json", "w", encoding="utf-8") as f:
+    json.dump(final_dict, f, ensure_ascii=False, indent=2)
