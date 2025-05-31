@@ -61,11 +61,11 @@ Format the entire response as JSON with these keys: reading_jp, reading_romaji, 
                 "generationConfig": {"responseMimeType": "application/json"},
             }
         elif translation_mode == "phrase":
-            # This prompt will attempt to translate the highlighted text to Japanese.
-            prompt_text = f'Translate the following text to Japanese: "{prompt}"'
+            # Instruct Gemini to provide ONLY the translation.
+            prompt_text = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{prompt}"'
             payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
         else:  # Default or unknown mode, treat as simple phrase translation to Japanese
-            prompt_text = f'Translate the following text to Japanese: "{prompt}"'
+            prompt_text = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{prompt}"'
             payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
 
         response = gemini_session.post(
