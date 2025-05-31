@@ -7,6 +7,55 @@ let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 10; // ms, adjust as needed (was 150ms)
 let selectionActionButton = null; // Our new action button
 let isExtensionEnabled = true; // Assume enabled by default, will be updated
+let lastSelectedRange = null;
+
+// Find word boundaries
+function findWordBoundariesInTextNode(textNode, offset) {
+    const text = textNode.textContent;
+    const len = text.length;
+
+    if (offset < 0 || offset > len) {
+        return null;
+    }
+
+    // Using Unicode property escapes for letter (L) and number (N) characters, plus underscore and hyphen.
+    const wordCharRegex = /[\p{L}\p{N}_-]/u;
+
+    let start = offset;
+    let end = offset;
+
+    // Check if the character at the current offset is a word character.
+    // Or if the character before is a word character and the current isn't (i.e., cursor is at the end of a word).
+    let isWordCharAtOffset = (offset < len && wordCharRegex.test(text[offset]));
+
+    if (isWordCharAtOffset || (offset > 0 && wordCharRegex.test(text[offset - 1]) && (offset === len || !wordCharRegex.test(text[offset])))) {
+        // If cursor is at end of word (not on word char, but char before is), adjust start/end to that char.
+        if (!isWordCharAtOffset && offset > 0) {
+            start = offset - 1;
+            end = offset - 1; // Start with the last character of the word
+        }
+
+        // Expand left
+        while (start > 0 && wordCharRegex.test(text[start - 1])) {
+            start--;
+        }
+        // Expand right (end will be exclusive, like substring)
+        while (end < len && wordCharRegex.test(text[end])) {
+            end++;
+        }
+    } else {
+        // Not on or immediately after a word character sequence
+        return null;
+    }
+
+    const selectedWord = text.substring(start, end);
+    // Final check if the extracted substring is actually a word and not just whitespace or empty
+    if (selectedWord.trim() === '' || !wordCharRegex.test(selectedWord[0])) { // Check first char of substring
+        return null;
+    }
+
+    return { start, end };
+}
 
 // Function to initialize extension state and set up listeners
 function initializeExtensionState() {
@@ -77,10 +126,8 @@ function updateGlobalEventHandlers() {
   }
 }
 
-
 // Call initialization
 initializeExtensionState();
-
 
 // Function to create/get the popup
 async function getOrCreatePopup() {
@@ -153,8 +200,6 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
 
   if (finalLeft < 0) finalLeft = 10;
   if (finalTop < 0) finalTop = 10;
-
-
 
   currentPopup.style.left = `${finalLeft}px`;
   currentPopup.style.top = `${finalTop}px`;
@@ -453,27 +498,102 @@ function hideSelectionActionButton() {
 // Debounced mousemove handler
 function handleMouseMove(event) {
   if (!isExtensionEnabled || !isShiftHeld) {
-    if (popup && popup.style.display !== 'none' && !popup.matches(':hover')) {
+    // If modifier is not held, clear any programmatic selection
+    if (lastSelectedRange) {
+        window.getSelection().removeAllRanges();
+        lastSelectedRange = null;
     }
     return;
   }
 
-  // Debounce hover detection
   clearTimeout(hoverDetectionTimeout);
   hoverDetectionTimeout = setTimeout(() => {
-    const element = document.elementFromPoint(event.clientX, event.clientY);
-    if (element) {
-      const word = getWordAtPoint(element, event.clientX, event.clientY);
-      if (word && word !== lastHoveredWord) {
-        lastHoveredWord = word;
-        console.log("Shift-hovered word:", word);
-        showTranslation(word, event, 'word'); // Specify 'word' mode
-      } else if (!word && lastHoveredWord) {
-        // Moved off a word, clear lastHoveredWord to allow re-triggering on same word if moused back over
-        lastHoveredWord = "";
-        // Optionally hide popup if mouse moves to non-word area
-        // hidePopup(); 
-      }
+    // Logic for translation popup (your existing logic)
+    const elementForTranslation = document.elementFromPoint(event.clientX, event.clientY);
+    const wordForTranslation = getWordAtPoint(elementForTranslation, event.clientX, event.clientY);
+    if (wordForTranslation && wordForTranslation !== lastHoveredWord) {
+      lastHoveredWord = wordForTranslation;
+      showTranslation(wordForTranslation, event, 'word');
+    } else if (!wordForTranslation && lastHoveredWord) {
+      lastHoveredWord = "";
+      // Optional: consider if popup should hide here. Current logic hides on click-outside/modifier-up.
+      // hidePopup(); 
+    }
+
+    // New logic for highlighting word under cursor
+    if (typeof document.caretPositionFromPoint === 'function') {
+        const caretPos = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if (caretPos && caretPos.offsetNode) {
+            const node = caretPos.offsetNode;
+            const offset = caretPos.offset;
+
+            if (node.nodeType === Node.TEXT_NODE) {
+                const wordBoundaries = findWordBoundariesInTextNode(node, offset);
+                if (wordBoundaries) {
+                    const newRange = document.createRange();
+                    newRange.setStart(node, wordBoundaries.start);
+                    newRange.setEnd(node, wordBoundaries.end);
+
+                    const selection = window.getSelection();
+                    let isSameAsCurrentSelection = false;
+                    if (selection.rangeCount > 0) {
+                        const currentDOMSelection = selection.getRangeAt(0);
+                        if (currentDOMSelection.startContainer === newRange.startContainer &&
+                            currentDOMSelection.endContainer === newRange.endContainer &&
+                            currentDOMSelection.startOffset === newRange.startOffset &&
+                            currentDOMSelection.endOffset === newRange.endOffset) {
+                            isSameAsCurrentSelection = true;
+                        }
+                    }
+                    
+                    // Only update selection if it's different from the current DOM selection
+                    // and also different from our last programmatically set range (to avoid flicker if caretPos is unstable)
+                    let isSameAsLastProgrammaticSelection = false;
+                    if (lastSelectedRange) {
+                        if (lastSelectedRange.startContainer === newRange.startContainer &&
+                            lastSelectedRange.endContainer === newRange.endContainer &&
+                            lastSelectedRange.startOffset === newRange.startOffset &&
+                            lastSelectedRange.endOffset === newRange.endOffset) {
+                            isSameAsLastProgrammaticSelection = true;
+                        }
+                    }
+
+                    if (!isSameAsCurrentSelection && !isSameAsLastProgrammaticSelection) {
+                        selection.removeAllRanges();
+                        selection.addRange(newRange.cloneRange());
+                        lastSelectedRange = newRange; 
+                    }
+                } else {
+                    // No word boundaries found at this point, clear our programmatic selection
+                    if (lastSelectedRange) {
+                        const selection = window.getSelection();
+                        // Check if the current selection is the one we made
+                        if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)){
+                             selection.removeAllRanges();
+                        }
+                        lastSelectedRange = null;
+                    }
+                }
+            } else {
+                // Not a text node, clear our programmatic selection
+                if (lastSelectedRange) {
+                    const selection = window.getSelection();
+                     if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)){
+                         selection.removeAllRanges();
+                     }
+                    lastSelectedRange = null;
+                }
+            }
+        } else {
+            // caretPositionFromPoint returned null, clear our programmatic selection
+            if (lastSelectedRange) {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)){
+                    selection.removeAllRanges();
+                }
+                lastSelectedRange = null;
+            }
+        }
     }
   }, HOVER_DEBOUNCE_DELAY);
 }
@@ -487,10 +607,30 @@ function handleKeyDown(event) {
 function handleKeyUp(event) {
   if (event.key === currentModifierKey) {
     isShiftHeld = false;
-    if (hoverDetectionTimeout) { // Clear any pending hover detection
+    if (hoverDetectionTimeout) {
         clearTimeout(hoverDetectionTimeout);
         hoverDetectionTimeout = null;
     }
+    // Clear the programmatic selection when modifier key is released
+    if (lastSelectedRange) {
+        const selection = window.getSelection();
+        // Only remove if it's the range we created (or if no selection exists which shouldn't be the case)
+        // This check might be overly cautious but prevents clearing user's own selection if logic gets complex.
+        // A simpler window.getSelection().removeAllRanges(); might be fine too.
+        if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)) {
+            selection.removeAllRanges();
+        } else if (selection.rangeCount === 0 && lastSelectedRange) {
+            // If there's no selection but we thought we had one, just clear our record
+        }
+        // More robustly, if we want to ensure *any* selection is cleared that might have been ours:
+        // window.getSelection().removeAllRanges(); 
+        // For now, let's be specific if possible, or just clear all if the above is too complex.
+        // Given the flow, a general removeAllRanges is probably fine here if isShiftHeld was true.
+        window.getSelection().removeAllRanges(); 
+        lastSelectedRange = null;
+    }
+    // Note: The decision to hide the popup here was removed previously in your code,
+    // as popup hiding is managed by handleMouseDown or extension disabling.
   }
 }
 
