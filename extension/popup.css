@@ -1,5 +1,5 @@
 #readoku-popup {
-  position: fixed;
+  position: absolute;
   background-color: white;
   border: 1px solid #ccc;
   padding: 10px;
@@ -10,8 +10,8 @@
   min-width: 200px; /* Min width it can be resized to */
   height: auto;    /* Let content determine height initially */
   min-height: 200px; /* Smaller min-height */
-  resize: vertical;      /* Allow both horizontal and vertical resize */
-  overflow: auto;    /* Use `auto` for both axes if `resize: both` */
+  resize: vertical;      /* Allow vertical resize */
+  overflow: auto;
   border-radius: 5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.2);
   color: #333;
