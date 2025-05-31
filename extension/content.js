@@ -92,30 +92,56 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
   let initialTop = pTop;
 
   if (mouseEvent) {
-    initialLeft = mouseEvent.clientX + 15;
-    initialTop = mouseEvent.clientY + 15;
+    initialLeft = mouseEvent.clientX + window.scrollX + 15;
+    initialTop = mouseEvent.clientY + window.scrollY + 15;
+  }else{
+    initialLeft = pLeft;
+    initialTop = pTop;
   }
   
-  const popupRect = currentPopup.getBoundingClientRect();
+  // const popupRect = currentPopup.getBoundingClientRect();
+  const popupWidth = currentPopup.offsetWidth;
+  const popupHeight = currentPopup.offsetHeight;
+
   let finalLeft = initialLeft;
   let finalTop = initialTop;
 
   // Adjust if out of viewport
-  if (finalLeft + popupRect.width > window.innerWidth) {
-    finalLeft = window.innerWidth - popupRect.width - 10;
+  // if (finalLeft + popupRect.width > window.innerWidth) {
+  //   finalLeft = window.innerWidth - popupRect.width - 10;
+  // }
+  // if (finalTop + popupRect.height > window.innerHeight) {
+  //   finalTop = window.innerHeight - popupRect.height - 10;
+  // }
+
+  // Adjust if out of right edge of the current viewport
+  if (finalLeft + popupWidth > window.scrollX + window.innerWidth - 10) {
+    finalLeft = window.scrollX + window.innerWidth - popupWidth - 10;
   }
-  if (finalTop + popupRect.height > window.innerHeight) {
-    finalTop = window.innerHeight - popupRect.height - 10;
+  // Adjust if out of bottom edge of the current viewport
+  if (finalTop + popupHeight > window.scrollY + window.innerHeight - 10) {
+    finalTop = window.scrollY + window.innerHeight - popupHeight - 10;
   }
+  // Adjust if out of left edge of the current viewport
+  if (finalLeft < window.scrollX + 10) {
+    finalLeft = window.scrollX + 10;
+  }
+  // Adjust if out of top edge of the current viewport
+  if (finalTop < window.scrollY + 10) {
+    finalTop = window.scrollY + 10;
+  }
+
   if (finalLeft < 0) finalLeft = 10;
   if (finalTop < 0) finalTop = 10;
+
+
 
   currentPopup.style.left = `${finalLeft}px`;
   currentPopup.style.top = `${finalTop}px`;
 }
 
 // Function to show translation
-function showTranslation(text, eventForPositioning) {
+function showTranslation(text, eventForPositioning, translationMode = 'word') {
   if (!isExtensionEnabled) return; // Do nothing if extension is disabled
   const localPopup = getOrCreatePopup();
   if (!localPopup) return; // If popup creation was blocked by disabled state
@@ -123,7 +149,7 @@ function showTranslation(text, eventForPositioning) {
   localPopup.style.display = 'block';
   positionPopup(localPopup, 0, 0, eventForPositioning); // Initial position with loader
 
-  chrome.runtime.sendMessage({ action: 'translate', text: text }, (response) => {
+  chrome.runtime.sendMessage({ action: 'translate', text: text, translationMode: translationMode }, (response) => {
     if (chrome.runtime.lastError) {
       console.error("Runtime error:", chrome.runtime.lastError.message);
       if (localPopup) localPopup.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
@@ -131,10 +157,12 @@ function showTranslation(text, eventForPositioning) {
     }
     
     if (response) {
-      // Response.translation can now be an object (from local dict) or string (from proxy)
-      // Response.source tells us where it came from ('local', 'chatgpt', 'cache' - though cache now mirrors original source type)
+      // Response.translation can now be an object (from local, gemini_structured, local_fallback) or string (gemini_simple)
+      // Response.source tells us where it came from
       if (response.translation) {
-        if (typeof response.translation === 'object' && response.source === 'local') {
+        if ( (typeof response.translation === 'object' && 
+              (response.source === 'local' || response.source === 'gemini_structured' || response.source === 'local_fallback') ) ) {
+          // Handle rich translation from local dictionary, structured JSON from Gemini, or local fallback
           localPopup.innerHTML = buildRichTranslationHtml(response.translation, text);
           
           const copyButton = document.querySelector('[data-action="copy-translation"]');
@@ -161,7 +189,7 @@ function showTranslation(text, eventForPositioning) {
             })
           }
 
-        } else if (typeof response.translation === 'string') { // From proxy or old cache format
+        } else if (typeof response.translation === 'string') { // From proxy (gemini_simple) or old cache format
           localPopup.innerHTML = `<div class="translation-simple">${response.translation}</div> <small>(${response.source || 'unknown'})</small>`;
         } else {
            localPopup.innerHTML = 'Error: Unexpected translation format received.';
@@ -365,34 +393,30 @@ function hideSelectionActionButton() {
 // Debounced mousemove handler
 function handleMouseMove(event) {
   if (!isExtensionEnabled || !isShiftHeld) {
-    // If shift is released or extension disabled, clear any pending hover detection
-    if (hoverDetectionTimeout) {
-      clearTimeout(hoverDetectionTimeout);
-      hoverDetectionTimeout = null;
+    if (popup && popup.style.display !== 'none' && !popup.matches(':hover')) {
+        // If shift is released, and mouse moves out of popup, hide it
+        // This is a bit aggressive, might need refinement if popup interaction is desired
+        // hidePopup(); 
     }
-    // Optionally hide popup if shift is released and it's a hover popup
-    // Be careful here not to interfere with selection popups
-    // For now, let's assume hidePopup() is called appropriately elsewhere or not needed here.
     return;
   }
 
-  if (hoverDetectionTimeout) {
-    clearTimeout(hoverDetectionTimeout);
-  }
+  // Debounce hover detection
+  clearTimeout(hoverDetectionTimeout);
   hoverDetectionTimeout = setTimeout(() => {
-    const targetElement = event.target;
-    // Avoid showing hover popup if the selection action button is visible or if a selection is active
-    if (selectionActionButton && selectionActionButton.style.display === 'block') return;
-    if (window.getSelection().toString().trim()) return; // Don't show hover if text is selected
-
-    const word = getWordAtPoint(targetElement, event.clientX, event.clientY);
-    if (word && word !== lastHoveredWord) {
-      lastHoveredWord = word;
-      showTranslation(word, event);
-    } else if (!word && popup && popup.style.display === 'block' && !popup.contains(event.target)) {
-      // Consider if hover popup should auto-hide when mouse moves to non-word and it's not over the popup itself.
-      // This might be too aggressive now that popups are sticky.
-      // For now, popups only hide on outside click.
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    if (element) {
+      const word = getWordAtPoint(element, event.clientX, event.clientY);
+      if (word && word !== lastHoveredWord) {
+        lastHoveredWord = word;
+        console.log("Shift-hovered word:", word);
+        showTranslation(word, event, 'word'); // Specify 'word' mode
+      } else if (!word && lastHoveredWord) {
+        // Moved off a word, clear lastHoveredWord to allow re-triggering on same word if moused back over
+        lastHoveredWord = "";
+        // Optionally hide popup if mouse moves to non-word area
+        // hidePopup(); 
+      }
     }
   }, HOVER_DEBOUNCE_DELAY);
 }
@@ -422,40 +446,34 @@ function handleKeyUp(event) {
 
 function handleMouseUp(event) {
   if (!isExtensionEnabled) return;
-  // Don't show if shift is held (that's for hover translation)
-  // Or if the click was on an existing popup or the selection action button itself.
-  if (isShiftHeld || (popup && popup.contains(event.target)) || (selectionActionButton && selectionActionButton.contains(event.target))) {
-    return;
-  }
 
-  // Use a small timeout to allow click event to propagate and selection to finalize
-  setTimeout(() => {
-    const selectedText = window.getSelection().toString().trim();
-    if (selectedText) {
-      const selection = window.getSelection();
-      if (selection.rangeCount > 0) {
-        const range = selection.getRangeAt(selection.rangeCount - 1); // Get the last range
-        const rects = range.getClientRects();
-        if (rects.length > 0) {
-          const lastRect = rects[rects.length - 1]; // Get the last rectangle of the selection
-          // Position button slightly after the end of the selection
-          let btnX = window.scrollX + lastRect.right + 5;
-          let btnY = window.scrollY + lastRect.bottom - (lastRect.height / 2) - 12; // Center vertically relative to last line, then shift up a bit
-          
-          // Basic viewport adjustment for button
-          if (btnX + 30 > window.innerWidth) btnX = window.innerWidth - 30;
-          if (btnY + 30 > window.innerHeight) btnY = window.innerHeight - 30;
-          if (btnY < 0) btnY = 0;
+  // Hide the selection action button first if it's visible
+  hideSelectionActionButton();
 
-          showSelectionActionButton(btnX, btnY);
-        } else {
-            hideSelectionActionButton(); // Hide if no valid rects (e.g. empty selection)
+  const selectedText = window.getSelection().toString().trim();
+
+  if (selectedText && selectedText.length > 0 && !isShiftHeld) { // Ensure shift is NOT held for selection
+    console.log("Selected text for translation:", selectedText);
+    // showSelectionActionButton(event.clientX, event.clientY); // Original logic
+    // Instead of showing button, directly translate
+    showTranslation(selectedText, event, 'phrase'); // Specify 'phrase' mode
+  } else if (!selectedText && popup && !popup.matches(':hover')) {
+    // If no text is selected and the click was outside the popup, hide the popup.
+    // This helps in closing the popup when clicking elsewhere, unless it's on the popup itself.
+    // Check if the click was on the popup or its children
+    let targetElement = event.target;
+    let clickedOnPopup = false;
+    while(targetElement) {
+        if (targetElement.id === 'readoku-popup') {
+            clickedOnPopup = true;
+            break;
         }
-      }
-    } else {
-      hideSelectionActionButton();
+        targetElement = targetElement.parentElement;
     }
-  }, 10); // Small delay
+    if (!clickedOnPopup) {
+        // hidePopup(); // Decide if this is still needed or if mousedown handles it.
+    }
+  }
 }
 
 function handleMouseDown(event) {
