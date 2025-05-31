@@ -1,5 +1,5 @@
 let popup = null;
-let popupContent = null; // To store the fetched HTML structure
+let popupContentCache = null; // Renamed for clarity, stores the fetched HTML structure
 let isShiftHeld = false;
 let currentModifierKey = 'Shift'; // Default hotkey
 let lastHoveredWord = ""; // To avoid redundant processing for the same word
@@ -92,7 +92,7 @@ async function getOrCreatePopup() {
   }
 
   if (!popup.firstChild || popup.querySelector('.readoku-loader-container') === null) { // Check if content needs to be loaded
-    const newPopupContent = await fetchPopupHtml();
+    const newPopupContent = await fetchPopupHtmlStructure();
     if (newPopupContent) {
       popup.innerHTML = ''; // Clear previous content (e.g. old loader)
       popup.appendChild(newPopupContent);
@@ -133,14 +133,6 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
 
   let finalLeft = initialLeft;
   let finalTop = initialTop;
-
-  // Adjust if out of viewport
-  // if (finalLeft + popupRect.width > window.innerWidth) {
-  //   finalLeft = window.innerWidth - popupRect.width - 10;
-  // }
-  // if (finalTop + popupRect.height > window.innerHeight) {
-  //   finalTop = window.innerHeight - popupRect.height - 10;
-  // }
 
   // Adjust if out of right edge of the current viewport
   if (finalLeft + popupWidth > window.scrollX + window.innerWidth - 10) {
@@ -579,8 +571,8 @@ function handleMouseDown(event) {
   }
 }
 
-async function fetchPopupHtml() {
-  if (!popupContent) {
+async function fetchPopupHtmlStructure() {
+  if (!popupContentCache) {
     try {
       const response = await fetch(chrome.runtime.getURL('translation-popup/translation-popup.html'));
       if (!response.ok) {
@@ -589,15 +581,16 @@ async function fetchPopupHtml() {
       const text = await response.text();
       const parser = new DOMParser();
       const doc = parser.parseFromString(text, 'text/html');
-      popupContent = doc.querySelector('#readoku-popup-content'); // Get the main content div
-      if (!popupContent) {
+      popupContentCache = doc.querySelector('#readoku-popup-content'); // Get the main content div
+      if (!popupContentCache) {
         console.error("Readoku: #readoku-popup-content not found in fetched HTML.");
         return null;
       }
     } catch (error) {
-      console.error("Readoku: Error fetching popup HTML:", error);
+      console.error("Readoku: Error fetching popup HTML structure:", error);
+      popupContentCache = null; // Ensure it can be retried if needed, or handle error more gracefully
       return null;
     }
   }
-  return popupContent.cloneNode(true); // Return a clone to avoid issues with re-injection
+  return popupContentCache.cloneNode(true); // Return a clone to avoid issues with re-injection
 }
