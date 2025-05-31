@@ -55,18 +55,27 @@ def translate():
 5. Japanese explanation (simple, if possible)
 6. 1 example sentence in English (simple, if possible)
 7. 1 sentences same as 6. in Japanese (simple, if possible)
-Format the entire response as JSON with these keys: reading_jp, reading_romaji, part_of_speech, definition_en, explanation_jp, example_en, example_jp"""
+Format response as JSON with these keys: reading_jp, reading_romaji, part_of_speech, definition_en, explanation_jp, example_en, example_jp"""
             payload = {
                 "contents": [{"parts": [{"text": prompt_text}]}],
-                "generationConfig": {"responseMimeType": "application/json"},
+                "generationConfig": { "responseMimeType": "application/json" }
             }
         elif translation_mode == "phrase":
-            # Instruct Gemini to provide ONLY the translation.
             prompt_text = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{prompt}"'
-            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-        else:  # Default or unknown mode, treat as simple phrase translation to Japanese
+            payload = {
+                "contents": [{"parts": [{"text": prompt_text}]}]
+            }
+        elif translation_mode == "dictionaryLookup":
+            prompt_text = prompt
+            payload = {
+                "contents": [{"parts": [{"text": prompt_text}]}],
+                "generationConfig": { "responseMimeType": "application/json" }
+            }
+        else:
             prompt_text = f'Translate the following text to Japanese. Provide only the Japanese translation and no other explanatory text or breakdown: "{prompt}"'
-            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+            payload = {
+                "contents": [{"parts": [{"text": prompt_text}]}]
+            }
 
         response = gemini_session.post(
             GEMINI_API_URL, json=payload, timeout=GEMINI_API_TIMEOUT
@@ -85,28 +94,15 @@ Format the entire response as JSON with these keys: reading_jp, reading_romaji, 
         )
 
         if raw_text_from_gemini:
-            if translation_mode == "word":
+            if translation_mode == "word" or translation_mode == "dictionaryLookup":
                 try:
-                    # For "word" mode, Gemini is asked to return a JSON string.
-                    # We parse this string into a Python dict.
                     parsed_translation_object = json.loads(raw_text_from_gemini)
-                    # Flask's jsonify will then convert this dict to a JSON response.
                     return jsonify(parsed_translation_object)
                 except json.JSONDecodeError as e:
-                    app.logger.error(
-                        f"Gemini returned invalid JSON for word translation: {e}"
-                    )
-                    app.logger.error(f"Raw text from Gemini: {raw_text_from_gemini}")
-                    return (
-                        jsonify(
-                            {
-                                "error": "Gemini returned invalid JSON for word translation",
-                                "details": str(e),
-                                "raw_gemini_text": raw_text_from_gemini,
-                            }
-                        ),
-                        502,
-                    )
+                    app.logger.error(f"Gemini returned invalid JSON for {translation_mode}: {e}. Raw: {raw_text_from_gemini}")
+                    if translation_mode == "dictionaryLookup":
+                        return jsonify({"formattedText": raw_text_from_gemini})
+                    return jsonify({"error": f"Gemini returned invalid JSON for {translation_mode}", "details": str(e), "raw_gemini_text": raw_text_from_gemini}), 502
             else:  # "phrase" mode
                 # For "phrase" mode, we expect plain text.
                 return jsonify({"translatedText": raw_text_from_gemini})

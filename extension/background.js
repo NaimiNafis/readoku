@@ -156,6 +156,63 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ enabled: isEnabled });
     });
     return true; // Indicates asynchronous response
+  } else if (request.action === 'geminiSearch') {
+    const searchQuery = request.query;
+    if (!searchQuery) {
+      sendResponse({ error: "No search query provided." });
+      return true;
+    }
+
+    console.log("Calling Gemini proxy for dictionary search:", searchQuery);
+    const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; 
+    // We use the same proxy, but the prompt will be different.
+    // The 'translationMode' will be specific for this kind of search if needed, 
+    // or the server can infer from a specific prompt structure.
+    // For now, let's make a new mode/prompt for a general dictionary-style lookup.
+
+    const requestBody = {
+      prompt: `Provide a detailed dictionary-style entry for the term "${searchQuery}". Include:
+1. Pronunciation (if applicable, e.g., Romaji for Japanese).
+2. Part(s) of speech.
+3. Multiple English definitions or explanations, with examples.
+4. If it's a Japanese term, also provide its common readings in Kana.
+5. If it's an English term, provide example sentences for its usage.
+Format the main response as a structured JSON object if possible, otherwise, well-formatted text is acceptable.`, 
+      // No specific targetLanguage here, as the prompt is more about defining the term.
+      translationMode: 'dictionaryLookup' // A new mode for the server to handle
+    };
+
+    fetch(geminiProxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().catch(() => null).then(errorBody => {
+                const errorMessage = errorBody?.errorMessage || errorBody?.error || `Proxy request failed: ${response.status}`;
+                return { error: errorMessage, status: response.status, source: 'gemini_search_proxy_error' }; 
+            });
+        }
+        // For dictionary lookup, we might expect JSON or structured text.
+        // The server side needs to be adjusted to handle 'dictionaryLookup' mode.
+        return response.json(); // Assuming server will send back JSON for this mode too.
+    })
+    .then(data => {
+        if (data.error) {
+            console.warn("Error from Gemini search:", data.error);
+            sendResponse({ error: data.error, details: data.details || data.raw_gemini_text || data, source: 'gemini_search' });
+        } else {
+            console.log("Gemini search success for:", searchQuery);
+            // The data itself is the result. It could be an object or a pre-formatted string from Gemini.
+            sendResponse({ result: data, source: 'gemini_search' }); 
+        }
+    })
+    .catch(error => {
+      console.error("Fetch Error calling Gemini for search:", error);
+      sendResponse({ error: error.message || "Failed to connect to Gemini for search", source: 'gemini_search_network_error' });
+    });
+    return true; // Asynchronous response
   }
 });
 

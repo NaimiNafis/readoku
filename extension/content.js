@@ -1,5 +1,6 @@
 let popup = null;
 let isShiftHeld = false;
+let currentModifierKey = 'Shift'; // Default hotkey
 let lastHoveredWord = ""; // To avoid redundant processing for the same word
 let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 10; // ms, adjust as needed (was 150ms)
@@ -25,7 +26,7 @@ function initializeExtensionState() {
 }
 
 
-// Listen for state changes from the background script
+// Listen for state changes from the background script or settings page
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "EXTENSION_STATE_CHANGED") {
     console.log("Readoku: State changed to", request.enabled ? "Enabled" : "Disabled");
@@ -36,10 +37,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       hideSelectionActionButton(); // Hide action button
     }
     sendResponse({ received: true }); // Acknowledge message
+  } else if (request.type === "SETTINGS_UPDATED") {
+    console.log("Readoku: Settings updated", request.settings);
+    if (request.settings.readokuHotkey) {
+      currentModifierKey = request.settings.readokuHotkey;
+      // Reset isShiftHeld just in case the key was held during a change
+      isShiftHeld = false;
+      console.log("Readoku: Hotkey updated to", currentModifierKey);
+    }
+    // Appearance settings will be applied when popup is shown/created
+    sendResponse({ received: true });
   }
-  // Keep other message listeners if any, or ensure this doesn't interfere.
-  // If content.js only listens to EXTENSION_STATE_CHANGED, this is fine.
-  // If it listens to other messages, ensure they are correctly handled.
   return true; // Important for async sendResponse, or if other listeners might respond.
 });
 
@@ -81,6 +89,24 @@ function getOrCreatePopup() {
     popup.id = 'readoku-popup';
     document.body.appendChild(popup);
   }
+  // Apply styles from settings
+  chrome.storage.local.get(['popupFontSize', 'popupFontColor', 'popupFontBold'], function(settings) {
+    if (settings.popupFontSize) {
+      popup.style.fontSize = `${settings.popupFontSize}px`;
+    } else {
+      popup.style.fontSize = ''; // Reset to default from CSS if not set
+    }
+    if (settings.popupFontColor) {
+      popup.style.color = settings.popupFontColor;
+    } else {
+      popup.style.color = ''; // Reset
+    }
+    if (settings.popupFontBold !== undefined) {
+      popup.style.fontWeight = settings.popupFontBold ? 'bold' : 'normal';
+    } else {
+      popup.style.fontWeight = ''; // Reset
+    }
+  });
   return popup;
 }
 
@@ -449,15 +475,13 @@ function handleMouseMove(event) {
 }
 
 function handleKeyDown(event) {
-  if (event.key === 'Shift') {
+  if (event.key === currentModifierKey && !isShiftHeld) { // Check against currentModifierKey and ensure not already set
     isShiftHeld = true;
-    // Potentially clear last hovered word to allow re-triggering on same word if shift was released and pressed again
-    // lastHoveredWord = ""; // Uncomment if this behavior is desired
   }
 }
 
 function handleKeyUp(event) {
-  if (event.key === 'Shift') {
+  if (event.key === currentModifierKey) {
     isShiftHeld = false;
     // If shift is released, NO LONGER hide the hover-triggered popup here.
     // Hiding is now solely managed by handleMouseDown (click outside) or when extension is disabled.
