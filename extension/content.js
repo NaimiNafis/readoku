@@ -1,4 +1,5 @@
 let popup = null;
+let popupContent = null; // To store the fetched HTML structure
 let isShiftHeld = false;
 let currentModifierKey = 'Shift'; // Default hotkey
 let lastHoveredWord = ""; // To avoid redundant processing for the same word
@@ -82,30 +83,31 @@ initializeExtensionState();
 
 
 // Function to create/get the popup
-function getOrCreatePopup() {
+async function getOrCreatePopup() {
   if (!isExtensionEnabled) return null; // Don't create if disabled
   if (!popup) {
     popup = document.createElement('div');
     popup.id = 'readoku-popup';
     document.body.appendChild(popup);
   }
+
+  if (!popup.firstChild || popup.querySelector('.readoku-loader-container') === null) { // Check if content needs to be loaded
+    const newPopupContent = await fetchPopupHtml();
+    if (newPopupContent) {
+      popup.innerHTML = ''; // Clear previous content (e.g. old loader)
+      popup.appendChild(newPopupContent);
+    } else {
+      popup.innerHTML = '<div class="translation-error-message">Error loading popup.</div>';
+      return popup; // Return popup even if content failed, so it can be hidden etc.
+    }
+  }
+  
   // Apply styles from settings
   chrome.storage.local.get(['popupFontSize', 'popupFontColor', 'popupFontBold'], function(settings) {
-    if (settings.popupFontSize) {
-      popup.style.fontSize = `${settings.popupFontSize}px`;
-    } else {
-      popup.style.fontSize = ''; // Reset to default from CSS if not set
-    }
-    if (settings.popupFontColor) {
-      popup.style.color = settings.popupFontColor;
-    } else {
-      popup.style.color = ''; // Reset
-    }
-    if (settings.popupFontBold !== undefined) {
-      popup.style.fontWeight = settings.popupFontBold ? 'bold' : 'normal';
-    } else {
-      popup.style.fontWeight = ''; // Reset
-    }
+    const popupStyle = popup.style; // Apply to the main container
+    popupStyle.fontSize = settings.popupFontSize ? `${settings.popupFontSize}px` : '';
+    popupStyle.color = settings.popupFontColor ? settings.popupFontColor : '';
+    popupStyle.fontWeight = settings.popupFontBold !== undefined ? (settings.popupFontBold ? 'bold' : 'normal') : '';
   });
   return popup;
 }
@@ -167,130 +169,163 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
 }
 
 // Function to show translation
-function showTranslation(text, eventForPositioning, translationMode = 'word') {
-  if (!isExtensionEnabled) return; // Do nothing if extension is disabled
-  const localPopup = getOrCreatePopup();
-  if (!localPopup) return; // If popup creation was blocked by disabled state
-  localPopup.innerHTML = '<div class="loader"></div>';
+async function showTranslation(text, eventForPositioning, translationMode = 'word') {
+  if (!isExtensionEnabled) return;
+  const localPopup = await getOrCreatePopup(); // Now async
+  if (!localPopup || !localPopup.firstChild) {
+      console.error("Readoku: Popup container or initial content not available.");
+      return;
+  }
+  const popupContentContainer = localPopup.querySelector('#readoku-popup-content');
+  if (!popupContentContainer) {
+      console.error("Readoku: #readoku-popup-content not found in live popup.");
+      return;
+  }
+
+  resetPopupState(popupContentContainer);
+
+  const loaderContainer = popupContentContainer.querySelector('.readoku-loader-container');
+  if (loaderContainer) loaderContainer.style.display = 'block';
+
   localPopup.style.display = 'block';
-  positionPopup(localPopup, 0, 0, eventForPositioning); // Initial position with loader
+  positionPopup(localPopup, 0, 0, eventForPositioning);
 
   chrome.runtime.sendMessage({ action: 'translate', text: text, translationMode: translationMode }, (response) => {
+    if (!popupContentContainer) return; // Guard if popup removed before response
+    if (loaderContainer) loaderContainer.style.display = 'none'; // Hide loader
+    
+    const sourceEl = popupContentContainer.querySelector('.translation-source');
+    if (sourceEl && response && response.source) {
+        sourceEl.textContent = `(${response.source})`;
+        sourceEl.style.display = 'block';
+    }
+
     if (chrome.runtime.lastError) {
       console.error("Runtime error:", chrome.runtime.lastError.message);
-      if (localPopup) localPopup.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+      setTextContent(popupContentContainer, '.translation-error-message', `Error: ${chrome.runtime.lastError.message}`);
       return;
     }
     
     if (response) {
-      // Response.translation can now be an object (from local, gemini_structured, local_fallback) or string (gemini_simple)
-      // Response.source tells us where it came from
       if (response.translation) {
-        if ( (typeof response.translation === 'object' && 
-              (response.source === 'local' || response.source === 'gemini_structured' || response.source === 'local_fallback') ) ) {
-          // Handle rich translation from local dictionary, structured JSON from Gemini, or local fallback
-          localPopup.innerHTML = buildRichTranslationHtml(response.translation, text);
-          
-          const copyButton = document.querySelector('[data-action="copy-translation"]');
-          const translation = document.getElementById('translation');
-          const check = document.getElementById('check-symbol');
+        const richDetailsContainer = popupContentContainer.querySelector('.rich-translation-details');
+        const simpleTextContainer = popupContentContainer.querySelector('.translation-simple-text');
 
-          async function copyTranslationToClipboard(text){
-            try{
-              await navigator.clipboard.writeText(text);
-              console.log("translation successfully copied to clipboard!");
-              check.textContent = "✓";
-            }catch(err){
-              console.error('Failed to copy plain text: ', err);
-            }finally{
-              setTimeout(()=>{
-                check.textContent = '';
-              }, 3000);
+        if (richDetailsContainer && simpleTextContainer) {
+            if (typeof response.translation === 'object' && 
+                (response.source === 'local' || response.source === 'gemini_structured' || response.source === 'local_fallback')) {
+                
+                richDetailsContainer.style.display = 'block';
+                simpleTextContainer.style.display = 'none';
+
+                const data = response.translation;
+                setTextContent(popupContentContainer, '.translation-word[data-field="reading_jp"]', data.reading_jp || text);
+                setTextContent(popupContentContainer, '.translation-romaji[data-field="reading_romaji"]', data.reading_romaji);
+                setTextContent(popupContentContainer, '.translation-pos[data-field="part_of_speech"]', data.part_of_speech);
+                setTextContent(popupContentContainer, '.translation-definition[data-field="definition_en"]', data.definition_en);
+                setTextContent(popupContentContainer, '.translation-explanation-jp[data-field="explanation_jp"]', data.explanation_jp);
+                
+                const exampleEnEl = popupContentContainer.querySelector('.translation-example-en[data-field="example_en"]');
+                const exampleJpEl = popupContentContainer.querySelector('.translation-example-jp[data-field="example_jp"]');
+                const exampleSection = popupContentContainer.querySelector('.example-section');
+
+                if (data.example_en && exampleEnEl && exampleJpEl && exampleSection) {
+                    exampleEnEl.textContent = data.example_en;
+                    exampleEnEl.style.display = '';
+                    if (data.example_jp) {
+                        exampleJpEl.textContent = `→ ${data.example_jp}`;
+                        exampleJpEl.style.display = '';
+                    } else {
+                        exampleJpEl.style.display = 'none';
+                    }
+                    exampleSection.style.display = 'block';
+                } else if (exampleSection) {
+                    exampleSection.style.display = 'none';
+                }
+
+                // Handle copy button
+                const copyButton = popupContentContainer.querySelector('.copy-translation-btn');
+                const checkSymbol = popupContentContainer.querySelector('.check-symbol[data-field="check_symbol"]');
+                if (copyButton) {
+                    copyButton.onclick = () => { // Use onclick for dynamically added content or re-add listener
+                        const translationText = popupContentContainer.querySelector('.translation-word[data-field="reading_jp"]');
+                        if (translationText && translationText.textContent) {
+                            navigator.clipboard.writeText(translationText.textContent).then(() => {
+                                if(checkSymbol) checkSymbol.textContent = "✓";
+                                setTimeout(() => { if(checkSymbol) checkSymbol.textContent = ''; }, 3000);
+                            }).catch(err => console.error('Failed to copy: ', err));
+                        }
+                    };
+                }
+
+            } else if (typeof response.translation === 'string') { 
+                richDetailsContainer.style.display = 'none';
+                simpleTextContainer.style.display = 'block';
+                simpleTextContainer.textContent = response.translation;
+            } else {
+                setTextContent(popupContentContainer, '.translation-error-message', 'Error: Unexpected translation format.');
             }
-          }
-
-          if(copyButton && translation && check){
-            copyButton.addEventListener('click', ()=>{
-              copyTranslationToClipboard(translation.innerText);
-            })
-          }
-
-        } else if (typeof response.translation === 'string') { // From proxy (gemini_simple) or old cache format
-          localPopup.innerHTML = `<div class="translation-simple">${response.translation}</div> <small>(${response.source || 'unknown'})</small>`;
-        } else {
-           localPopup.innerHTML = 'Error: Unexpected translation format received.';
         }
       } else if (response.error) {
-        localPopup.innerHTML = `Error: ${response.error} <small>(${response.source || 'proxy'})</small>`;
+        setTextContent(popupContentContainer, '.translation-error-message', `Error: ${response.error}`);
       } else {
-        localPopup.innerHTML = 'Error: Unexpected response.';
+        setTextContent(popupContentContainer, '.translation-error-message', 'Error: Unexpected response.');
       }
     } else {
-      localPopup.innerHTML = 'Error: No response from background.';
+      setTextContent(popupContentContainer, '.translation-error-message', 'Error: No response from background.');
     }
     
     if (localPopup.style.display === 'block') {
-      positionPopup(localPopup, parseFloat(localPopup.style.left || 0), parseFloat(localPopup.style.top || 0), eventForPositioning); // Re-position with content
+      positionPopup(localPopup, parseFloat(localPopup.style.left || 0), parseFloat(localPopup.style.top || 0), eventForPositioning);
     }
   });
 }
 
-// Function to build HTML for rich translation data
-function buildRichTranslationHtml(data, originalWord) {
-  // Sanitize data before putting into HTML to prevent XSS if data could be user-generated or from less trusted source
-  // For now, assuming dictionary.json is trusted.
-  
-  let html = '<div class="translation-rich">';
-  
-  // Word and Readings
-  html += '<div class="translation-header">';
-  html +=   `<div class="translation-word">
-                <div id="translation">${data.reading_jp || originalWord}</div>
-                <div class="to-copy">
-                  <p id="check-symbol"></p>
-                  <button class="translation-action-btn" data-action="copy-translation">📎</button>
-                </div>
-            </div>`;
-  if (data.reading_romaji) {
-    html +=   `<div class="translation-romaji">(${data.reading_romaji})</div>`;
+// Helper to set text and display for an element
+function setTextContent(parentElement, selector, text, isHtml = false) {
+  const element = parentElement.querySelector(selector);
+  if (element) {
+    if (text) {
+      if (isHtml) element.innerHTML = text; else element.textContent = text;
+      // Try to show the element itself and its relevant section parent if it has one
+      element.style.display = ''; 
+      let section = element.closest('.definition-section, .explanation-jp-section, .example-section, .translation-header, .translation-pos, .translation-footer');
+      if (section) section.style.display = '';
+    } else {
+      element.style.display = 'none';
+    }
   }
-  html += '</div>';
+}
 
-  // Part of Speech
-  if (data.part_of_speech) {
-    html += `<div class="translation-pos">(${data.part_of_speech})</div>`;
-  }
-
-  // Definition
-  if (data.definition_en) {
-    html += '<div class="translation-section-header">📝 Definition</div>';
-    html += `<div class="translation-definition">${data.definition_en}</div>`;
-  }
-
-  // Explanation in Japanese
-  if (data.explanation_jp) {
-    html += '<div class="translation-section-header">💡 Explanation (Japanese)</div>';
-    html += `<div class="translation-explanation-jp">${data.explanation_jp}</div>`;
-  }
-  
-  // Example Sentence
-  if (data.example_en && data.example_jp) {
-    html += '<div class="translation-section-header">📘 Example Sentence</div>';
-    html += '<div class="translation-example">';
-    html +=   `<div class="translation-example-en">"${data.example_en}"</div>`;
-    html +=   `<div class="translation-example-jp">→ ${data.example_jp}</div>`;
-    html += '</div>';
-  }
-
-  // Footer actions (placeholders for now)
-  html += '<div class="translation-footer">';
-  if (data.audio_url) { // Placeholder, audio not implemented yet
-    html +=   '<button class="translation-action-btn" data-action="play-audio">🔊 Play</button>';
-  }
-  html += '</div>';
-  
-  html += '</div>'; // close translation-rich
-  return html;
+function resetPopupState(popupContainer) {
+    // Hide all dynamic content sections/elements initially
+    const elementsToHideSelectors = [
+        '.readoku-loader-container',
+        '.translation-simple-text',
+        '.rich-translation-details',
+        '.translation-romaji',
+        '.translation-pos',
+        '.definition-section',
+        '.explanation-jp-section',
+        '.example-section',
+        '.translation-example-jp',
+        '.translation-footer',
+        '.translation-error-message',
+        '.translation-source'
+    ];
+    elementsToHideSelectors.forEach(selector => {
+        const el = popupContainer.querySelector(selector);
+        if (el) el.style.display = 'none';
+    });
+    // Clear text from fields
+    const fieldsToClear = popupContainer.querySelectorAll('[data-field]');
+    fieldsToClear.forEach(field => {
+        if(field.tagName === 'BUTTON' || field.classList.contains('check-symbol')) {
+            if(field.dataset.field === 'check_symbol') field.textContent = '';
+        } else {
+            field.textContent = '';
+        }
+    });
 }
 
 // Function to hide the popup
@@ -542,4 +577,27 @@ function handleMouseDown(event) {
       !(popup && popup.contains(event.target))) {
     hideSelectionActionButton();
   }
+}
+
+async function fetchPopupHtml() {
+  if (!popupContent) {
+    try {
+      const response = await fetch(chrome.runtime.getURL('translation-popup/translation-popup.html'));
+      if (!response.ok) {
+        throw new Error(`Failed to fetch popup HTML: ${response.statusText}`);
+      }
+      const text = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'text/html');
+      popupContent = doc.querySelector('#readoku-popup-content'); // Get the main content div
+      if (!popupContent) {
+        console.error("Readoku: #readoku-popup-content not found in fetched HTML.");
+        return null;
+      }
+    } catch (error) {
+      console.error("Readoku: Error fetching popup HTML:", error);
+      return null;
+    }
+  }
+  return popupContent.cloneNode(true); // Return a clone to avoid issues with re-injection
 }

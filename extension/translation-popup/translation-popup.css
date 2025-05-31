@@ -34,22 +34,30 @@
   margin-bottom: 8px;
 }
 
-.translation-word {
+.translation-word-container {
   display: flex;
   justify-content: space-between;
+  align-items: center; /* Align items vertically */
   font-size: 1.4em;
   font-weight: bold;
   color: #2c3e50;
 }
 
-.to-copy{
+.translation-word {
+  /* Takes up available space */
+  flex-grow: 1;
+}
+
+.copy-button-container{
   display: flex;
+  align-items: center; /* Align items in this sub-container */
+  margin-left: 10px; /* Space from the word */
 }
 
 #check-symbol{
   color: green;
   margin-right: 5px;
-  margin-bottom: 0;
+  font-size: 0.8em; /* Adjust size relative to button */
 }
 
 .translation-romaji {
@@ -146,14 +154,14 @@
   transform: scale(1.1);
 }
 
-.loader {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #3498db;
+.readoku-loader {
+  border: 4px solid #f3f3f3; /* Light grey */
+  border-top: 4px solid #3498db; /* Blue */
   border-radius: 50%;
-  width: 20px;
-  height: 20px;
+  width: 30px;  /* Standardized size */
+  height: 30px; /* Standardized size */
   animation: spin 1s linear infinite;
-  margin: 0 auto;
+  margin: 20px auto; /* Center it if it's the only thing visible */
 }
 
 @keyframes spin {
@@ -161,4 +169,5 @@
   100% { transform: rotate(360deg); }
 }
 
-/* TODO: Add styles for loading spinner */ 
+/* Remove old .loader if it conflicts or is redundant */
+/* TODO: Review if .loader class is used elsewhere or if .readoku-loader is sufficient */ 
