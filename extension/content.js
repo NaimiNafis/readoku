@@ -359,15 +359,15 @@ function getOrCreateSelectionActionButton() {
   if (!selectionActionButton) {
     selectionActionButton = document.createElement('button');
     selectionActionButton.id = 'readoku-selection-action-btn';
-    // Using text for now, can be an icon later
-    selectionActionButton.textContent = 'R⚡'; // R for Readoku, Lightning for quick action
+    selectionActionButton.textContent = 'R⚡'; // R for Readoku, Lightning for quick action. User can style this to be a logo.
     document.body.appendChild(selectionActionButton);
 
     selectionActionButton.addEventListener('click', (event) => {
       event.stopPropagation(); // Prevent this click from being caught by document mousedown listener
-      const selectedText = window.getSelection().toString().trim();
+      const selectedText = selectionActionButton.dataset.selectedText; // Retrieve stored text
       if (selectedText) {
-        showTranslation(selectedText, event); // Pass the click event for positioning popup
+        // Pass the button's click event for positioning the main popup
+        showTranslation(selectedText, event, 'phrase'); 
       }
       hideSelectionActionButton(); // Hide button after click
     });
@@ -375,12 +375,39 @@ function getOrCreateSelectionActionButton() {
   return selectionActionButton;
 }
 
-function showSelectionActionButton(x, y) {
+function showSelectionActionButton(x, y, selectedText) {
   if (!isExtensionEnabled) return; // Do nothing if disabled
   const btn = getOrCreateSelectionActionButton();
   if (!btn) return; // If button creation was blocked
-  btn.style.left = `${x}px`;
-  btn.style.top = `${y}px`;
+  
+  btn.dataset.selectedText = selectedText; // Store selected text on the button
+
+  // Basic positioning, ensure it's within viewport
+  const btnWidth = btn.offsetWidth || 30; // Estimate if not rendered
+  const btnHeight = btn.offsetHeight || 30;
+
+  let finalX = x;
+  let finalY = y;
+
+  // Adjust if out of right edge
+  if (finalX + btnWidth > window.scrollX + window.innerWidth - 10) {
+    finalX = window.scrollX + window.innerWidth - btnWidth - 10;
+  }
+  // Adjust if out of bottom edge
+  if (finalY + btnHeight > window.scrollY + window.innerHeight - 10) {
+    finalY = window.scrollY + window.innerHeight - btnHeight - 10;
+  }
+  // Adjust if out of left edge
+  if (finalX < window.scrollX + 10) {
+    finalX = window.scrollX + 10;
+  }
+  // Adjust if out of top edge
+  if (finalY < window.scrollY + 10) {
+    finalY = window.scrollY + 10;
+  }
+  
+  btn.style.left = `${finalX}px`;
+  btn.style.top = `${finalY}px`;
   btn.style.display = 'block';
 }
 
@@ -447,61 +474,77 @@ function handleKeyUp(event) {
 function handleMouseUp(event) {
   if (!isExtensionEnabled) return;
 
-  // Hide the selection action button first if it's visible
-  hideSelectionActionButton();
-
-  const selectedText = window.getSelection().toString().trim();
-
-  if (selectedText && selectedText.length > 0 && !isShiftHeld) { // Ensure shift is NOT held for selection
-    console.log("Selected text for translation:", selectedText);
-    // showSelectionActionButton(event.clientX, event.clientY); // Original logic
-    // Instead of showing button, directly translate
-    showTranslation(selectedText, event, 'phrase'); // Specify 'phrase' mode
-  } else if (!selectedText && popup && !popup.matches(':hover')) {
-    // If no text is selected and the click was outside the popup, hide the popup.
-    // This helps in closing the popup when clicking elsewhere, unless it's on the popup itself.
-    // Check if the click was on the popup or its children
-    let targetElement = event.target;
-    let clickedOnPopup = false;
-    while(targetElement) {
-        if (targetElement.id === 'readoku-popup') {
-            clickedOnPopup = true;
-            break;
-        }
-        targetElement = targetElement.parentElement;
+  // If shift is held, it's for word hover, not selection action.
+  if (isShiftHeld) {
+    // If a selection action button was visible, hide it.
+    if (selectionActionButton && selectionActionButton.style.display === 'block') {
+        hideSelectionActionButton();
     }
-    if (!clickedOnPopup) {
-        // hidePopup(); // Decide if this is still needed or if mousedown handles it.
-    }
+    return;
   }
+  
+  // If the click was on the selection action button itself, its own handler will deal with it.
+  if (selectionActionButton && selectionActionButton.contains(event.target)) {
+    return;
+  }
+
+  // Use a small timeout to allow click event to propagate and selection to finalize
+  setTimeout(() => {
+    if (isShiftHeld) return; // Re-check shift key state, as it might have been pressed during timeout
+
+    const selectedText = window.getSelection().toString().trim();
+    
+    if (selectedText && selectedText.length > 0) {
+      console.log("Selected text for action button:", selectedText);
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(selection.rangeCount - 1); // Get the last range
+        const rects = range.getClientRects();
+        if (rects.length > 0) {
+          const lastRect = rects[rects.length - 1]; // Get the last rectangle of the selection
+          
+          // Position button slightly after the end of the selection or below the last line
+          let btnX = window.scrollX + lastRect.right + 5;
+          let btnY = window.scrollY + lastRect.bottom - (lastRect.height / 2) - 15; // Center vertically on last line, shift up
+
+          // Fallback if selection is too far left (e.g. full line selected from start)
+          if (lastRect.right < 50) btnX = window.scrollX + lastRect.left + (lastRect.width / 2);
+
+
+          showSelectionActionButton(btnX, btnY, selectedText);
+          // IMPORTANT: Do NOT call showTranslation here directly anymore for selections
+        } else {
+            hideSelectionActionButton(); // Hide if no valid rects (e.g. empty selection)
+        }
+      }
+    } else {
+      // No text selected, or selection cleared
+      // Hide the button if it was visible and the click was not on the main popup
+      if (selectionActionButton && selectionActionButton.style.display === 'block') {
+         if (!popup || !popup.contains(event.target)){ // Don't hide if click is on main popup
+            hideSelectionActionButton();
+         }
+      }
+      // The logic for hiding the main popup on outside click is in handleMouseDown
+    }
+  }, 10); // Small delay for selection to finalize
 }
 
 function handleMouseDown(event) {
   if (!isExtensionEnabled) return;
 
-  // Hide popup if click is outside
-  // Check if the click is on the popup itself or the selection button
-  if (popup && popup.style.display === 'block' && !popup.contains(event.target)) {
-    // If a selection action button exists and the click is on it, let its own handler manage the popup
-    if (selectionActionButton && selectionActionButton.contains(event.target)) {
-      return;
-    }
+  // Hide main popup if click is outside
+  if (popup && popup.style.display === 'block' && !popup.contains(event.target) && 
+      !(selectionActionButton && selectionActionButton.contains(event.target))) {
+    // Also ensure click isn't on the selection button, as that will trigger its own logic (which then shows popup)
     hidePopup();
   }
 
-  // Hide selection action button if click is outside
-  if (selectionActionButton && selectionActionButton.style.display === 'block' && !selectionActionButton.contains(event.target)) {
-    // Also, ensure the click is not on the popup, as clicking the popup might be an action (e.g. copy)
-    // and we don't want to hide the button then.
-    // This condition can be tricky. If clicking an action in the popup should also hide the button,
-    // then this is fine. If not, more specific logic is needed.
-    if (popup && popup.contains(event.target)) {
-        // Click was inside the main translation popup, maybe don't hide the button yet
-        // Or, maybe we always hide it if the click isn't on the button itself.
-        // For now, let's assume we hide it if the click is not on the button.
-    } else {
-      hideSelectionActionButton();
-    }
+  // Hide selection action button if click is outside of it AND not on the main popup
+  if (selectionActionButton && selectionActionButton.style.display === 'block' && 
+      !selectionActionButton.contains(event.target) && 
+      !(popup && popup.contains(event.target))) {
+    hideSelectionActionButton();
   }
 }
 

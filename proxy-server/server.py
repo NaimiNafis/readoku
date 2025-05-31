@@ -1,11 +1,17 @@
 import requests
 from flask import Flask, jsonify, request
 import json
+import os
 
 app = Flask(__name__)
 
-# ⚠️ Replace with your actual Gemini API key
-GEMINI_API_KEY = "AIzaSyDdYqRfLcVsOhJAqbr7wElGQKd52037vfI"
+# Load API key from environment variable
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    # Raise an error or provide a default for local development if you prefer,
+    # but for production, it should be set.
+    raise ValueError("GEMINI_API_KEY environment variable not set.")
+
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={GEMINI_API_KEY}"
 
 
@@ -28,23 +34,41 @@ def translate():
 5. Japanese explanation
 6. Example sentences (English and Japanese)
 Format response as JSON with these keys: reading_jp, reading_romaji, part_of_speech, definition_en, explanation_jp, example_en, example_jp"""
-        elif translation_mode == "phrase":
-            prompt_text = f'Translate the following Japanese text to English: "{prompt}"'
-        else:
-            prompt_text = f'Translate the following Japanese text to English: "{prompt}"'
-
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {"text": prompt_text}
-                    ]
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt_text}
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "responseMimeType": "application/json"
                 }
-            ],
-            "generationConfig": {
-                "responseMimeType": "application/json"
             }
-        }
+        elif translation_mode == "phrase":
+            # This prompt will attempt to translate the highlighted text to Japanese.
+            prompt_text = f'Translate the following text to Japanese: "{prompt}"'
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt_text}
+                        ]
+                    }
+                ]
+            }
+        else: # Default or unknown mode, treat as simple phrase translation to Japanese
+            prompt_text = f'Translate the following text to Japanese: "{prompt}"'
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt_text}
+                        ]
+                    }
+                ]
+            }
 
         response = requests.post(GEMINI_API_URL, json=payload)
         response.raise_for_status()
