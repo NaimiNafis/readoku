@@ -1,39 +1,56 @@
-import os
-from flask import Flask, request, jsonify
-from openai import OpenAI # TODO: Ensure this is the correct import for the version used
-from dotenv import load_dotenv
-
-load_dotenv()
+import requests
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# TODO: Consider more robust API key handling for production
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+# ⚠️ Replace with your actual Gemini API key
+GEMINI_API_KEY = "AIzaSyCmmainObr-CVK6Ib3axici_M3wv-4QCKs"
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
 
-@app.route('/translate', methods=['POST'])
-def translate_text():
-    data = request.get_json()
-    text_to_translate = data.get('text')
 
-    if not text_to_translate:
-        return jsonify({"error": "No text provided"}), 400
-
+@app.route("/translate-gemini", methods=["POST"])
+def translate():
     try:
-        # TODO: Refine prompt and parameters for better translation quality
-        # TODO: Implement error handling for OpenAI API calls
-        completion = client.chat.completions.create(
-            model="gpt-3.5-turbo", # TODO: Make model configurable
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant that translates English to Japanese."},
-                {"role": "user", "content": f"Translate the following text to Japanese: {text_to_translate}"}
+        data = request.json
+        prompt = data.get("prompt", "")
+
+        if not prompt:
+            return jsonify({"error": "No prompt provided"}), 400
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {"text": f'Translate the following to Japanese:\n"{prompt}"'}
+                    ]
+                }
             ]
+        }
+
+        response = requests.post(GEMINI_API_URL, json=payload)
+        response.raise_for_status()
+
+        gemini_data = response.json()
+        translated_text = (
+            gemini_data.get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text")
         )
-        translation = completion.choices[0].message.content
-        return jsonify({"translation": translation})
+
+        if translated_text:
+            return jsonify({"translatedText": translated_text})
+        else:
+            return (
+                jsonify(
+                    {"error": "No translation received from Gemini", "raw": gemini_data}
+                ),
+                502,
+            )
+
     except Exception as e:
-        # TODO: Log errors appropriately
         return jsonify({"error": str(e)}), 500
 
-if __name__ == '__main__':
-    # TODO: Make host and port configurable
-    app.run(debug=True, port=5001) 
+
+if __name__ == "__main__":
+    app.run(port=5001, debug=True)

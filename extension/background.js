@@ -7,7 +7,7 @@ let cache = {}; // TODO: Implement cache eviction strategy
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 // Load dictionary on startup
-fetch(chrome.runtime.getURL('dictionary.json'))
+fetch(chrome.runtime.getURL('./structured_dict.json'))
   .then(response => {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
