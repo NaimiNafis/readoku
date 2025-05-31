@@ -1,7 +1,3 @@
-// TODO: Implement caching
-// TODO: Implement local dictionary lookup
-// TODO: Implement ChatGPT API call via proxy
-
 let dictionary = {};
 let cache = {}; // TODO: Implement cache eviction strategy
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
@@ -20,10 +16,7 @@ fetch(chrome.runtime.getURL('dictionary.json'))
   })
   .catch(error => {
     console.error("Error loading dictionary:", error);
-    // TODO: Implement fallback or error notification to the user
   });
-
-// Removed context menu creation and listener logic
 
 chrome.runtime.onInstalled.addListener(() => {
   // Set an initial state when the extension is installed or updated
@@ -156,8 +149,51 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ enabled: isEnabled });
     });
     return true; // Indicates asynchronous response
+  } else if (request.action === 'geminiSearch') {
+    const searchQuery = request.query;
+    if (!searchQuery) {
+      sendResponse({ error: "No search query provided." });
+      return true;
+    }
+
+    console.log("Calling Gemini proxy for dictionary search (EN->JA focused, server-defined prompt):", searchQuery);
+    const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; 
+
+    const requestBody = {
+      prompt: searchQuery, // Only send the query text
+      translationMode: 'dictionaryLookup' // Server uses this to select the correct detailed prompt and expect JSON
+    };
+
+    fetch(geminiProxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().catch(() => null).then(errorBody => {
+                const errorMessage = errorBody?.errorMessage || errorBody?.error || `Proxy request failed: ${response.status}`;
+                return { error: errorMessage, status: response.status, source: 'gemini_search_proxy_error' }; 
+            });
+        }
+        // For dictionary lookup, we might expect JSON or structured text.
+        // The server side needs to be adjusted to handle 'dictionaryLookup' mode.
+        return response.json(); // Assuming server will send back JSON for this mode too.
+    })
+    .then(data => {
+        if (data.error) {
+            console.warn("Error from Gemini search:", data.error);
+            sendResponse({ error: data.error, details: data.details || data.raw_gemini_text || data, source: 'gemini_search' });
+        } else {
+            console.log("Gemini search success for:", searchQuery);
+            // The data itself is the result. It could be an object or a pre-formatted string from Gemini.
+            sendResponse({ result: data, source: 'gemini_search' }); 
+        }
+    })
+    .catch(error => {
+      console.error("Fetch Error calling Gemini for search:", error);
+      sendResponse({ error: error.message || "Failed to connect to Gemini for search", source: 'gemini_search_network_error' });
+    });
+    return true; // Asynchronous response
   }
 });
-
-// TODO: Add error handling and loading states (e.g. if dictionary.json fails to load)
-// TODO: Implement more sophisticated logic for deciding when to use local vs. ChatGPT (e.g., based on word complexity or part of speech) 

@@ -1,17 +1,32 @@
 document.addEventListener('DOMContentLoaded', function () {
   const toggleSwitch = document.getElementById('toggleSwitch');
   const toggleStatusText = document.getElementById('toggleStatusText');
-  // const settingsBtn = document.getElementById('settingsBtn');
-  // const searchBtn = document.getElementById('searchBtn');
-  // const helpBtn = document.getElementById('helpBtn');
+  const settingsBtn = document.getElementById('settingsBtn');
+  const searchBtn = document.getElementById('searchBtn');
+  const infoBtn = document.getElementById('infoBtn');
+  const scanHint = document.querySelector('.scan-hint span'); // For updating hotkey hint
 
-  // Load initial state from storage
-  chrome.storage.local.get(['extensionEnabled'], function (result) {
-    const isEnabled = result.extensionEnabled === undefined ? true : result.extensionEnabled; // Default to true (on)
+  // Load initial state and hotkey from storage
+  chrome.storage.local.get(['extensionEnabled', 'readokuHotkey'], function (result) {
+    const isEnabled = result.extensionEnabled === undefined ? true : result.extensionEnabled;
     toggleSwitch.checked = isEnabled;
     toggleStatusText.textContent = isEnabled ? 'On' : 'Off';
     document.body.classList.toggle('extension-on', isEnabled);
     document.body.classList.toggle('extension-off', !isEnabled);
+
+    const hotkey = result.readokuHotkey || 'Shift'; // Default to Shift
+    if (scanHint) {
+      scanHint.textContent = hotkey;
+    }
+  });
+
+  // Listen for storage changes to update hotkey hint dynamically
+  chrome.storage.onChanged.addListener(function(changes, namespace) {
+    if (namespace === 'local' && changes.readokuHotkey) {
+      if (scanHint) {
+        scanHint.textContent = changes.readokuHotkey.newValue || 'Shift';
+      }
+    }
   });
 
   // Handle toggle switch changes
@@ -22,23 +37,18 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.classList.toggle('extension-off', !isEnabled);
 
     chrome.storage.local.set({ extensionEnabled: isEnabled });
-    // Send message to background script
     chrome.runtime.sendMessage({ type: 'TOGGLE_EXTENSION', enabled: isEnabled });
   });
 
-  // Placeholder for button functionalities
-  // settingsBtn.addEventListener('click', () => {
-  //   console.log('Settings button clicked');
-  //   // chrome.runtime.openOptionsPage(); // If you have an options page
-  // });
+  settingsBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('settings/settings.html') });
+  });
 
-  // searchBtn.addEventListener('click', () => {
-  //   console.log('Search button clicked');
-  //   // Implement search functionality or open a search interface
-  // });
+  searchBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('search/search.html') });
+  });
 
-  // helpBtn.addEventListener('click', () => {
-  //   console.log('Help button clicked');
-  //   // Open a help page or guide
-  // });
+  infoBtn.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://github.com/NaimiNafis/readoku' });
+  });
 }); 
