@@ -16,7 +16,7 @@ app = Flask(__name__)
 
 gemini_session = requests.Session()
 translation_cache = LRUCache(maxsize=500)
-GEMINI_API_TIMEOUT = 15
+GEMINI_API_TIMEOUT = 10
 # Load API key from environment variable
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
