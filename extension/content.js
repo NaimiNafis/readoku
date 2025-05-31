@@ -6,6 +6,8 @@ let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 10; // ms, adjust as needed (was 150ms)
 let selectionActionButton = null; // Our new action button
 let isExtensionEnabled = true; // Assume enabled by default, will be updated
+let isShiftPressed = false;
+let lastSelectedRange = null;
 
 // Function to initialize extension state and set up listeners
 function initializeExtensionState() {
@@ -435,6 +437,7 @@ function handleMouseMove(event) {
   clearTimeout(hoverDetectionTimeout);
   hoverDetectionTimeout = setTimeout(() => {
     const element = document.elementFromPoint(event.clientX, event.clientY);
+    const caretPos = document.caretPositionFromPoint(event.clientX, event.clientY);
     if (element) {
       const word = getWordAtPoint(element, event.clientX, event.clientY);
       if (word && word !== lastHoveredWord) {
@@ -445,10 +448,109 @@ function handleMouseMove(event) {
         // Moved off a word, clear lastHoveredWord to allow re-triggering on same word if moused back over
         lastHoveredWord = "";
         // Optionally hide popup if mouse moves to non-word area
-        // hidePopup(); 
+        hidePopup(); 
       }
     }
+    if (caretPos && caretPos.offsetNode) { // Check if caretPos and its node are valid
+      const node = caretPos.offsetNode;
+      const offset = caretPos.offset;
+      console.log("Node:", node, "Offset:", offset, "Node type:", node.nodeType); // Debug log
+
+      // Ensure we are in a text node (nodeType === 3)
+      if (node.nodeType === Node.TEXT_NODE) {
+        const wordBoundaries = findWordBoundariesInTextNode(node, offset);
+        console.log("Word boundaries found:", wordBoundaries); // Debug log
+
+        if (wordBoundaries) {
+          const newRange = document.createRange();
+          newRange.setStart(node, wordBoundaries.start);
+          newRange.setEnd(node, wordBoundaries.end);
+
+          const selection = window.getSelection();
+
+          let isSameSelection = false;
+          if (lastSelectedRange && selection.rangeCount > 0) {
+              const currentSelection = selection.getRangeAt(0);
+              if (currentSelection.startContainer === newRange.startContainer &&
+                  currentSelection.endContainer === newRange.endContainer &&
+                  currentSelection.startOffset === newRange.startOffset &&
+                  currentSelection.endOffset === newRange.endOffset) {
+                  isSameSelection = true;
+              }
+          }
+
+          if (!isSameSelection) {
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+              lastSelectedRange = newRange; // Store the new range
+              console.log("Selected word:", node.textContent.substring(wordBoundaries.start, wordBoundaries.end)); // Debug log
+          }
+        } else {
+          console.log("No word boundaries found at this point."); // Debug log
+          // No word found at mouse position, clear selection if one exists from this feature
+          if (lastSelectedRange) {
+            window.getSelection().removeAllRanges();
+            lastSelectedRange = null;
+          }
+        }
+      } else {
+         console.log("Not a text node. Node type:", node.nodeType, "Node content:", node.textContent); // Debug log
+         // If it's not a text node (e.g., an element node), clear previous selection
+         if (lastSelectedRange) {
+           window.getSelection().removeAllRanges();
+           lastSelectedRange = null;
+         }
+      }
+    } else {
+        console.log("caretPositionFromPoint returned null or invalid object."); // Debug log
+        // If the position is invalid, clear previous selection
+        if (lastSelectedRange) {
+            window.getSelection().removeAllRanges();
+            lastSelectedRange = null;
+        }
+    }
   }, HOVER_DEBOUNCE_DELAY);
+}
+
+// Your findWordBoundariesInTextNode function goes here
+function findWordBoundariesInTextNode(textNode, offset) {
+    // ... (Your refined function from the previous answer) ...
+    const text = textNode.textContent;
+    const len = text.length;
+
+    if (offset < 0 || offset > len) {
+        return null;
+    }
+
+    const wordCharRegex = /[\p{L}\p{N}_-]/u;
+
+    let start = offset;
+    let end = offset;
+
+    let isWordCharAtOffset = (offset < len && wordCharRegex.test(text[offset]));
+
+    if (isWordCharAtOffset || (offset > 0 && wordCharRegex.test(text[offset - 1]) && !wordCharRegex.test(text[offset]))) {
+        if (!isWordCharAtOffset && offset > 0) {
+            start = offset - 1;
+            end = offset - 1;
+        }
+
+        while (start > 0 && wordCharRegex.test(text[start - 1])) {
+            start--;
+        }
+        while (end < len && wordCharRegex.test(text[end])) {
+            end++;
+        }
+    } else {
+        return null;
+    }
+
+    const selectedWord = text.substring(start, end);
+    if (selectedWord.trim() === '' || !wordCharRegex.test(selectedWord)) {
+        return null;
+    }
+
+    return { start, end };
 }
 
 function handleKeyDown(event) {
@@ -460,6 +562,13 @@ function handleKeyDown(event) {
 function handleKeyUp(event) {
   if (event.key === currentModifierKey) {
     isShiftHeld = false;
+    // If shift is released, NO LONGER hide the hover-triggered popup here.
+    // Hiding is now solely managed by handleMouseDown (click outside) or when extension is disabled.
+    // if (popup && popup.style.display === 'block' /*&& !isSelectionPopup() for example */) {
+    //     hidePopup();
+    // }
+    window.getSelection.removeAllRanges();
+    lastSelectedRange = null;
     if (hoverDetectionTimeout) { // Clear any pending hover detection
         clearTimeout(hoverDetectionTimeout);
         hoverDetectionTimeout = null;
