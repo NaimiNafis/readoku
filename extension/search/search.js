@@ -38,30 +38,68 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         searchResultsDiv.innerHTML = `<p class="error">Error: ${errorMessage}</p>`;
       } else if (response.result) {
-        // If result is already an object (parsed JSON from Gemini by server)
-        if (typeof response.result === 'object') {
-          // Attempt to format the JSON nicely. This is a basic approach.
-          // You might want a more sophisticated way to render specific dictionary fields.
-          let formattedResult = '<dl>';
-          for (const key in response.result) {
-            if (response.result.hasOwnProperty(key)) {
-              formattedResult += `<dt><strong>${escapeHtml(key.replace(/_/g, ' '))}</strong></dt>`;
-              let value = response.result[key];
-              if (typeof value === 'object') {
-                value = JSON.stringify(value, null, 2);
-                formattedResult += `<dd><pre>${escapeHtml(value)}</pre></dd>`;
-              } else {
-                formattedResult += `<dd>${escapeHtml(String(value))}</dd>`;
-              }
-            }
+        searchResultsDiv.innerHTML = ''; // Clear previous results or loader
+
+        if (typeof response.result === 'object' && response.result !== null) {
+          const data = response.result;
+          let html = '<div class="search-entry">';
+
+          // English Term
+          const term = data.term_en || query; // Use original query as fallback
+          html += `<h2>${escapeHtml(term)}</h2>`;
+
+          // Katakana Reading
+          if (data.reading_katakana) {
+            html += `<p class="pronunciation"><em>${escapeHtml(data.reading_katakana)}</em></p>`;
           }
-          formattedResult += '</dl>';
-          searchResultsDiv.innerHTML = formattedResult;
-        } else if (response.result.formattedText) { // If server sent back formatted text due to JSON parse error
+
+          // Part of Speech (can be JP or EN)
+          if (data.part_of_speech) {
+            html += `<p class="part-of-speech"><strong>Part of Speech:</strong> ${escapeHtml(data.part_of_speech)}</p>`;
+          }
+          
+          // Japanese Explanation
+          if (data.explanation_jp) {
+            html += '<h3>Explanation (Japanese):</h3>';
+            const explanations = Array.isArray(data.explanation_jp) ? data.explanation_jp : [data.explanation_jp];
+            explanations.forEach(exp => {
+                html += `<div class="explanation-jp">${escapeHtml(String(exp)).replace(/\n/g, '<br>')}</div>`;
+            });
+          }
+
+          // Examples (Array of {en, jp})
+          if (data.examples && Array.isArray(data.examples) && data.examples.length > 0) {
+            html += '<h3>Example Sentences:</h3><ul class="examples-list">';
+            data.examples.forEach(ex => {
+              if (ex && ex.en && ex.jp) {
+                html += `<li>
+                           <p class="example-en">${escapeHtml(ex.en)}</p>
+                           <p class="example-jp-translation">→ ${escapeHtml(ex.jp)}</p>
+                         </li>`;
+              } else if (ex && ex.en) { // Only English example
+                 html += `<li><p class="example-en">${escapeHtml(ex.en)}</p></li>`;
+              }
+            });
+            html += '</ul>';
+          }
+          
+          // Fallback for unexpected structure or if essential fields are missing
+          if (html === '<div class="search-entry">') { // Nothing significant was added
+             html += '<p>Received structured data, but could not parse specific fields as expected. Displaying raw data:</p>';
+             html += `<pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+          } else if (!data.explanation_jp && !data.examples) {
+            // If core content is missing, show raw data as well for debugging
+            html += '<hr><p><em>Core content (explanation or examples) might be missing. Raw data:</em></p>';
+            html += `<pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+          }
+
+          html += '</div>';
+          searchResultsDiv.innerHTML = html;
+
+        } else if (response.result.formattedText) { // Server sent back pre-formatted text
             searchResultsDiv.innerHTML = `<div class="formatted-text">${escapeHtml(response.result.formattedText).replace(/\n/g, '<br>')}</div>`;
-        }
-         else { // If it's just a string (less likely with current server setup for dictionaryLookup but possible)
-          searchResultsDiv.innerHTML = `<p>${escapeHtml(String(response.result))}</p>`;
+        } else { // Simple string result
+          searchResultsDiv.innerHTML = `<div class="formatted-text">${escapeHtml(String(response.result)).replace(/\n/g, '<br>')}</div>`;
         }
       } else {
         searchResultsDiv.innerHTML = '<p class="error">No result found or unexpected response.</p>';

@@ -1,28 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>Readoku Settings</title>
   <link rel="stylesheet" type="text/css" href="settings.css">
+  <link href="https://fonts.googleapis.com/css2?family=Lobster&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="container">
-    <h1>Readoku Settings</h1>
+    <header class="settings-header">
+      <img src="../icons/logo/logo48.png" alt="Readoku Logo" id="settingsLogo">
+      <span id="settingsTitle">Readoku Settings</span>
+    </header>
+    
     <div class="settings-group">
       <h2>Appearance</h2>
       <div>
         <label for="fontSize">Popup Font Size:</label>
-        <input type="number" id="fontSize" name="fontSize" min="10" max="30" value="16">
+        <input type="number" id="fontSize" name="fontSize" min="10" max="30">
         <span>px</span>
       </div>
       <div>
         <label for="fontColor">Popup Font Color:</label>
-        <input type="color" id="fontColor" name="fontColor" value="#ffffff">
+        <input type="color" id="fontColor" name="fontColor">
       </div>
       <div>
         <label for="fontBold">Popup Bold Text:</label>
         <input type="checkbox" id="fontBold" name="fontBold">
       </div>
+      <div class="preview-area">
+        <h3>Preview:</h3>
+        <div id="fontPreview" class="readoku-preview-popup">
+          これはフォントのプレビューです。<br>
+          This is a font preview.
+        </div>
+      </div>
     </div>
+
     <div class="settings-group">
       <h2>Hotkeys</h2>
       <div>
@@ -34,7 +48,10 @@
         </select>
       </div>
     </div>
-    <button id="saveSettingsBtn">Save Settings</button>
+    <div class="button-group">
+      <button id="saveSettingsBtn">Save Settings</button>
+      <button id="resetSettingsBtn" class="secondary-btn">Reset to Defaults</button>
+    </div>
   </div>
   <script src="settings.js"></script>
 </body>

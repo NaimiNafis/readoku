@@ -55,14 +55,22 @@ header {
 }
 
 #performSearchBtn {
-  padding: 10px 20px;
+  padding: 8px;
   background-color: #0e639c;
   color: white;
   border: 1px solid #0e639c;
+  border-left: none;
   border-radius: 0 4px 4px 0;
-  font-size: 1em;
   cursor: pointer;
   transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#performSearchBtn img {
+  width: 20px;
+  height: 20px;
 }
 
 #performSearchBtn:hover {
@@ -95,4 +103,98 @@ header {
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
-} 
+}
+
+#searchResults .search-entry {
+  text-align: left;
+}
+
+#searchResults .search-entry h2 {
+  color: #569cd6; /* Theme color for the term */
+  margin-top: 0;
+  margin-bottom: 5px;
+}
+
+#searchResults .search-entry h3 {
+  color: #c8c8c8;
+  margin-top: 15px;
+  margin-bottom: 8px;
+  font-size: 1.1em;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+}
+
+#searchResults .pronunciation {
+  font-style: italic;
+  color: #9cdcfe;
+  margin-bottom: 10px;
+}
+
+#searchResults .part-of-speech {
+  margin-bottom: 10px;
+}
+
+#searchResults .part-of-speech strong {
+  color: #dcdcaa;
+}
+
+#searchResults .definitions-list,
+#searchResults .examples-list {
+  list-style-type: disc;
+  padding-left: 20px;
+  margin-bottom: 15px;
+}
+
+#searchResults .definitions-list li,
+#searchResults .examples-list li {
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+#searchResults .example {
+  color: #b5cea8; /* Lighter green for examples */
+  display: block; /* Ensure it takes its own line if needed */
+  margin-top: 3px;
+}
+
+#searchResults .example-jp {
+    color: #ce9178; /* A distinct color for Japanese examples */
+}
+
+#searchResults .example-en {
+  margin-bottom: 2px;
+  color: #d4d4d4;
+}
+
+#searchResults .example-jp-translation {
+  color: #b5cea8;
+  padding-left: 1em;
+  font-style: italic;
+}
+
+#searchResults .explanation-jp {
+  background-color: #2c2c2c;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+  white-space: pre-wrap;
+  font-family: 'Noto Sans JP', sans-serif;
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+
+#searchResults pre {
+  white-space: pre-wrap;       /* Since CSS 2.1 */
+  white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+  white-space: -pre-wrap;      /* Opera 4-6 */
+  white-space: -o-pre-wrap;    /* Opera 7 */
+  word-wrap: break-word;       /* Internet Explorer 5.5+ */
+  background-color: #1a1a1a;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+  color: #d4d4d4;
+}
+
+/* Ensure Lobster font is loaded for title, if not already via Google Fonts link */
+@import url('https://fonts.googleapis.com/css2?family=Lobster&family=Noto+Sans+JP:wght@300;400;500&display=swap'); 

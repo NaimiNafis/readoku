@@ -1,7 +1,3 @@
-// TODO: Implement caching
-// TODO: Implement local dictionary lookup
-// TODO: Implement ChatGPT API call via proxy
-
 let dictionary = {};
 let cache = {}; // TODO: Implement cache eviction strategy
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
@@ -20,10 +16,7 @@ fetch(chrome.runtime.getURL('dictionary.json'))
   })
   .catch(error => {
     console.error("Error loading dictionary:", error);
-    // TODO: Implement fallback or error notification to the user
   });
-
-// Removed context menu creation and listener logic
 
 chrome.runtime.onInstalled.addListener(() => {
   // Set an initial state when the extension is installed or updated
@@ -163,23 +156,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    console.log("Calling Gemini proxy for dictionary search:", searchQuery);
+    console.log("Calling Gemini proxy for dictionary search (EN->JA focused):", searchQuery);
     const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; 
-    // We use the same proxy, but the prompt will be different.
-    // The 'translationMode' will be specific for this kind of search if needed, 
-    // or the server can infer from a specific prompt structure.
-    // For now, let's make a new mode/prompt for a general dictionary-style lookup.
 
     const requestBody = {
-      prompt: `Provide a detailed dictionary-style entry for the term "${searchQuery}". Include:
-1. Pronunciation (if applicable, e.g., Romaji for Japanese).
-2. Part(s) of speech.
-3. Multiple English definitions or explanations, with examples.
-4. If it's a Japanese term, also provide its common readings in Kana.
-5. If it's an English term, provide example sentences for its usage.
-Format the main response as a structured JSON object if possible, otherwise, well-formatted text is acceptable.`, 
-      // No specific targetLanguage here, as the prompt is more about defining the term.
-      translationMode: 'dictionaryLookup' // A new mode for the server to handle
+      // Updated prompt for Japanese learners of English
+      prompt: `The user is a Japanese speaker learning English. For the English term "${searchQuery}", provide a detailed dictionary-style entry primarily in JAPANESE. Include:
+1. The English term itself (key: term_en).
+2. Katakana reading of the English term, if applicable (key: reading_katakana).
+3. Detailed Japanese definition(s) or explanation(s) of the English term (key: explanation_jp). Use clear and simple Japanese suitable for learners.
+4. Part(s) of speech, preferably in Japanese (e.g., 名詞, 動詞) or English if Japanese is not natural (key: part_of_speech).
+5. Multiple example sentences demonstrating the usage of the English term, each with a natural Japanese translation (key: examples, as an array of objects with "en" and "jp" string properties).
+Format the entire response as a single, valid JSON object. Ensure all text values are properly escaped for JSON.`, 
+      translationMode: 'dictionaryLookup' // Server uses this to expect JSON
     };
 
     fetch(geminiProxyUrl, {
@@ -215,6 +204,3 @@ Format the main response as a structured JSON object if possible, otherwise, wel
     return true; // Asynchronous response
   }
 });
-
-// TODO: Add error handling and loading states (e.g. if dictionary.json fails to load)
-// TODO: Implement more sophisticated logic for deciding when to use local vs. ChatGPT (e.g., based on word complexity or part of speech) 

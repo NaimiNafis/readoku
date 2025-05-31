@@ -4,24 +4,41 @@ body {
   background-color: #1e1e1e;
   color: #d4d4d4;
   margin: 0;
-  padding: 20px;
+  padding: 0;
   display: flex;
   justify-content: center;
 }
 
 .container {
-  width: 100%;
+  width: 90%;
   max-width: 600px;
+  margin: 20px auto;
   background-color: #252526;
   padding: 20px;
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0,0,0,0.3);
 }
 
-h1 {
-  text-align: center;
+/* Settings Header */
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 25px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 15px;
+}
+
+#settingsLogo {
+  width: 40px;
+  height: 40px;
+  margin-right: 12px;
+}
+
+#settingsTitle {
+  font-family: 'Lobster', cursive;
+  font-size: 2.2em;
   color: #569cd6;
-  margin-top: 0;
 }
 
 .settings-group {
@@ -101,4 +118,48 @@ button:hover {
 
 .settings-group > div > span {
     margin-left: 5px;
+}
+
+.preview-area {
+  margin-top: 20px;
+  padding: 10px;
+  border: 1px dashed #444;
+  border-radius: 4px;
+}
+
+.preview-area h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 0.9em;
+  color: #aaa;
+}
+
+#fontPreview {
+  /* Mimic basic popup appearance for preview */
+  background-color: #FAF9F6; /* Slightly different from main popup for distinction if needed */
+  padding: 15px;
+  border-radius: 5px;
+  line-height: 1.6;
+  /* Default preview styles, will be overridden by JS */
+  font-size: 16px; 
+  color: #ffffff;
+  font-weight: normal;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px; /* Space between buttons */
+    margin-top: 20px;
+}
+
+.button-group button {
+    flex-grow: 1; /* Make buttons share space */
+}
+
+.secondary-btn {
+  background-color: #4f4f4f; /* Darker, less prominent */
+}
+
+.secondary-btn:hover {
+  background-color: #5a5a5a;
 } 

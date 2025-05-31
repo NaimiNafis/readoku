@@ -310,30 +310,10 @@ function getWordAtPoint(element, x, y) {
   // For text nodes, use their content
   if (element.nodeType === Node.TEXT_NODE) {
     const text = element.textContent;
-    // This is a simplified approach. A more robust solution would involve
-    // using Range.expand('word') or similar, if possible, or iterating
-    // characters around the point.
-    // For now, we'll take the whole text of the smallest text node.
-    // A truly accurate word detection from x,y within a text node is complex.
-    // We will use a simpler approach: iterate through words in the node.
-    // This is still a placeholder for a more robust solution.
     const words = text.match(/[\w'-]+/g); // Basic word regex
     if (words) {
-        // This doesn't actually use x,y to find *which* word.
-        // It just returns the first word for simplicity.
-        // A proper implementation would use document.caretPositionFromPoint
-        // and then expand.
-        // For now, we'll rely on the mouse being over a small enough text element.
-        // This is a significant simplification for now.
-        
-        // A slightly better approach for text nodes if caretPositionFromPoint is not used:
-        // If the element *is* the text node under the cursor.
-        // This still doesn't pinpoint the *exact* word at x,y without more complex range logic.
-        // We'll return the full text of the direct text node and let background decide if it's one word.
         const trimmedText = text.trim();
-        if (trimmedText.length > 0 && trimmedText.length < 50 && !trimmedText.includes('\\n')) { // Arbitrary length limit for "word"
-             // Try to split and find closest - this is complex.
-             // Let's just return the trimmed text of the node.
+        if (trimmedText.length > 0 && trimmedText.length < 50 && !trimmedText.includes('\\n')) {
             return trimmedText;
         }
     }
@@ -447,9 +427,6 @@ function hideSelectionActionButton() {
 function handleMouseMove(event) {
   if (!isExtensionEnabled || !isShiftHeld) {
     if (popup && popup.style.display !== 'none' && !popup.matches(':hover')) {
-        // If shift is released, and mouse moves out of popup, hide it
-        // This is a bit aggressive, might need refinement if popup interaction is desired
-        // hidePopup(); 
     }
     return;
   }
@@ -483,11 +460,6 @@ function handleKeyDown(event) {
 function handleKeyUp(event) {
   if (event.key === currentModifierKey) {
     isShiftHeld = false;
-    // If shift is released, NO LONGER hide the hover-triggered popup here.
-    // Hiding is now solely managed by handleMouseDown (click outside) or when extension is disabled.
-    // if (popup && popup.style.display === 'block' /*&& !isSelectionPopup() for example */) {
-    //     hidePopup();
-    // }
     if (hoverDetectionTimeout) { // Clear any pending hover detection
         clearTimeout(hoverDetectionTimeout);
         hoverDetectionTimeout = null;
@@ -571,37 +543,3 @@ function handleMouseDown(event) {
     hideSelectionActionButton();
   }
 }
-
-// Initialize event listeners based on the initial state
-// This will be called after fetching the initial state
-// initializeExtensionState(); // This is now called at the end of its own definition.
-
-// Ensure that all functions that trigger UI (showTranslation, showSelectionActionButton)
-// and the event handlers (handleMouseMove, handleMouseUp, handleMouseDown, handleKeyDown, handleKeyUp)
-// check `isExtensionEnabled` at the beginning and return early if false.
-// Also, when the state changes to disabled, actively hide any visible UI elements.
-
-/*
-Make sure to add the `isExtensionEnabled` check at the beginning of:
-- getOrCreatePopup() - DONE
-- showTranslation() - DONE
-- getOrCreateSelectionActionButton() - DONE
-- showSelectionActionButton() - DONE
-- handleMouseMove() - DONE (combined with isShiftHeld)
-- handleMouseUp() - DONE
-- handleMouseDown() - DONE
-
-And the following might need adjustment or checking:
-- handleKeyDown(event): This sets `isShiftHeld`. If the extension is disabled, `isShiftHeld` might still become true.
-  However, `handleMouseMove` checks both `isExtensionEnabled` AND `isShiftHeld`, so it should be okay.
-  No direct UI is shown by handleKeyDown.
-- handleKeyUp(event): This sets `isShiftHeld` to false and hides the popup.
-  If the extension is disabled, `isExtensionEnabled` will be false.
-  The `hidePopup()` call in `handleKeyUp` is fine even if disabled.
-  The `clearTimeout(hoverDetectionTimeout)` is also fine.
-*/
-
-// TODO: Add option to pin the popup
-// TODO: More robust word detection, especially for complex DOM structures or if caretPositionFromPoint is not well-supported.
-// TODO: Visual feedback for the highlighted word (e.g., underline).
-// TODO: Configuration for the modifier key. 
