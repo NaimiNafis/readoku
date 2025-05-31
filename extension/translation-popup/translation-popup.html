@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <!-- We don't need a full head here as this will be injected. Styles are from translation-popup.css -->
+</head>
+<body>
+  <div id="readoku-popup-content" class="translation-rich">
+    <!-- Loader: Initially visible, hidden when content loads -->
+    <div class="readoku-loader-container" style="display: none;">
+        <div class="readoku-loader"></div>
+    </div>
+
+    <!-- For simple string translations -->
+    <div class="translation-simple-text" style="display: none;"></div>
+    
+    <!-- For Rich Content -->
+    <div class="rich-translation-details" style="display: none;">
+        <div class="translation-header">
+            <div class="translation-word-container">
+                <div class="translation-word" data-field="reading_jp"></div>
+                <div class="copy-button-container">
+                    <span class="check-symbol" data-field="check_symbol"></span>
+                    <button class="translation-action-btn copy-translation-btn" data-action="copy-translation">📎</button>
+                </div>
+            </div>
+            <div class="translation-romaji" data-field="reading_romaji" style="display: none;"></div>
+        </div>
+
+        <div class="translation-pos" data-field="part_of_speech" style="display: none;"></div>
+
+        <div class="definition-section" style="display: none;">
+            <div class="translation-section-header">📝 Definition</div>
+            <div class="translation-definition" data-field="definition_en"></div>
+        </div>
+
+        <div class="explanation-jp-section" style="display: none;">
+            <div class="translation-section-header">💡 Explanation (Japanese)</div>
+            <div class="translation-explanation-jp" data-field="explanation_jp"></div>
+        </div>
+        
+        <div class="example-section" style="display: none;">
+            <div class="translation-section-header">📘 Example Sentence</div>
+            <div class="translation-example">
+                <div class="translation-example-en" data-field="example_en"></div>
+                <div class="translation-example-jp" data-field="example_jp" style="display: none;"></div>
+            </div>
+        </div>
+
+        <div class="translation-footer" style="display: none;">
+            <!-- Future buttons like play audio can go here -->
+            <!-- <button class="translation-action-btn" data-action="play-audio" data-field="audio_url" style="display: none;">🔊 Play</button> -->
+        </div>
+    </div>
+
+    <!-- For Error Messages -->
+    <div class="translation-error-message" style="display: none;"></div>
+
+    <!-- Source of translation (small text) -->
+    <small class="translation-source" style="display: none;"></small>
+  </div>
+</body>
+</html> 

@@ -1,4 +1,5 @@
 let popup = null;
+let popupContentCache = null; // Renamed for clarity, stores the fetched HTML structure
 let isShiftHeld = false;
 let currentModifierKey = 'Shift'; // Default hotkey
 let lastHoveredWord = ""; // To avoid redundant processing for the same word
@@ -6,8 +7,55 @@ let hoverDetectionTimeout = null; // To debounce mousemove
 const HOVER_DEBOUNCE_DELAY = 10; // ms, adjust as needed (was 150ms)
 let selectionActionButton = null; // Our new action button
 let isExtensionEnabled = true; // Assume enabled by default, will be updated
-let isShiftPressed = false;
 let lastSelectedRange = null;
+
+// Find word boundaries
+function findWordBoundariesInTextNode(textNode, offset) {
+    const text = textNode.textContent;
+    const len = text.length;
+
+    if (offset < 0 || offset > len) {
+        return null;
+    }
+
+    // Using Unicode property escapes for letter (L) and number (N) characters, plus underscore and hyphen.
+    const wordCharRegex = /[\p{L}\p{N}_-]/u;
+
+    let start = offset;
+    let end = offset;
+
+    // Check if the character at the current offset is a word character.
+    // Or if the character before is a word character and the current isn't (i.e., cursor is at the end of a word).
+    let isWordCharAtOffset = (offset < len && wordCharRegex.test(text[offset]));
+
+    if (isWordCharAtOffset || (offset > 0 && wordCharRegex.test(text[offset - 1]) && (offset === len || !wordCharRegex.test(text[offset])))) {
+        // If cursor is at end of word (not on word char, but char before is), adjust start/end to that char.
+        if (!isWordCharAtOffset && offset > 0) {
+            start = offset - 1;
+            end = offset - 1; // Start with the last character of the word
+        }
+
+        // Expand left
+        while (start > 0 && wordCharRegex.test(text[start - 1])) {
+            start--;
+        }
+        // Expand right (end will be exclusive, like substring)
+        while (end < len && wordCharRegex.test(text[end])) {
+            end++;
+        }
+    } else {
+        // Not on or immediately after a word character sequence
+        return null;
+    }
+
+    const selectedWord = text.substring(start, end);
+    // Final check if the extracted substring is actually a word and not just whitespace or empty
+    if (selectedWord.trim() === '' || !wordCharRegex.test(selectedWord[0])) { // Check first char of substring
+        return null;
+    }
+
+    return { start, end };
+}
 
 // Function to initialize extension state and set up listeners
 function initializeExtensionState() {
@@ -78,36 +126,35 @@ function updateGlobalEventHandlers() {
   }
 }
 
-
 // Call initialization
 initializeExtensionState();
 
-
 // Function to create/get the popup
-function getOrCreatePopup() {
+async function getOrCreatePopup() {
   if (!isExtensionEnabled) return null; // Don't create if disabled
   if (!popup) {
     popup = document.createElement('div');
     popup.id = 'readoku-popup';
     document.body.appendChild(popup);
   }
+
+  if (!popup.firstChild || popup.querySelector('.readoku-loader-container') === null) { // Check if content needs to be loaded
+    const newPopupContent = await fetchPopupHtmlStructure();
+    if (newPopupContent) {
+      popup.innerHTML = ''; // Clear previous content (e.g. old loader)
+      popup.appendChild(newPopupContent);
+    } else {
+      popup.innerHTML = '<div class="translation-error-message">Error loading popup.</div>';
+      return popup; // Return popup even if content failed, so it can be hidden etc.
+    }
+  }
+  
   // Apply styles from settings
   chrome.storage.local.get(['popupFontSize', 'popupFontColor', 'popupFontBold'], function(settings) {
-    if (settings.popupFontSize) {
-      popup.style.fontSize = `${settings.popupFontSize}px`;
-    } else {
-      popup.style.fontSize = ''; // Reset to default from CSS if not set
-    }
-    if (settings.popupFontColor) {
-      popup.style.color = settings.popupFontColor;
-    } else {
-      popup.style.color = ''; // Reset
-    }
-    if (settings.popupFontBold !== undefined) {
-      popup.style.fontWeight = settings.popupFontBold ? 'bold' : 'normal';
-    } else {
-      popup.style.fontWeight = ''; // Reset
-    }
+    const popupStyle = popup.style; // Apply to the main container
+    popupStyle.fontSize = settings.popupFontSize ? `${settings.popupFontSize}px` : '';
+    popupStyle.color = settings.popupFontColor ? settings.popupFontColor : '';
+    popupStyle.fontWeight = settings.popupFontBold !== undefined ? (settings.popupFontBold ? 'bold' : 'normal') : '';
   });
   return popup;
 }
@@ -134,14 +181,6 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
   let finalLeft = initialLeft;
   let finalTop = initialTop;
 
-  // Adjust if out of viewport
-  // if (finalLeft + popupRect.width > window.innerWidth) {
-  //   finalLeft = window.innerWidth - popupRect.width - 10;
-  // }
-  // if (finalTop + popupRect.height > window.innerHeight) {
-  //   finalTop = window.innerHeight - popupRect.height - 10;
-  // }
-
   // Adjust if out of right edge of the current viewport
   if (finalLeft + popupWidth > window.scrollX + window.innerWidth - 10) {
     finalLeft = window.scrollX + window.innerWidth - popupWidth - 10;
@@ -162,137 +201,168 @@ function positionPopup(currentPopup, pLeft, pTop, mouseEvent = null) {
   if (finalLeft < 0) finalLeft = 10;
   if (finalTop < 0) finalTop = 10;
 
-
-
   currentPopup.style.left = `${finalLeft}px`;
   currentPopup.style.top = `${finalTop}px`;
 }
 
 // Function to show translation
-function showTranslation(text, eventForPositioning, translationMode = 'word') {
-  if (!isExtensionEnabled) return; // Do nothing if extension is disabled
-  const localPopup = getOrCreatePopup();
-  if (!localPopup) return; // If popup creation was blocked by disabled state
-  localPopup.innerHTML = '<div class="loader"></div>';
+async function showTranslation(text, eventForPositioning, translationMode = 'word') {
+  if (!isExtensionEnabled) return;
+  const localPopup = await getOrCreatePopup(); // Now async
+  if (!localPopup || !localPopup.firstChild) {
+      console.error("Readoku: Popup container or initial content not available.");
+      return;
+  }
+  const popupContentContainer = localPopup.querySelector('#readoku-popup-content');
+  if (!popupContentContainer) {
+      console.error("Readoku: #readoku-popup-content not found in live popup.");
+      return;
+  }
+
+  resetPopupState(popupContentContainer);
+
+  const loaderContainer = popupContentContainer.querySelector('.readoku-loader-container');
+  if (loaderContainer) loaderContainer.style.display = 'block';
+
   localPopup.style.display = 'block';
-  positionPopup(localPopup, 0, 0, eventForPositioning); // Initial position with loader
+  positionPopup(localPopup, 0, 0, eventForPositioning);
 
   chrome.runtime.sendMessage({ action: 'translate', text: text, translationMode: translationMode }, (response) => {
+    if (!popupContentContainer) return; // Guard if popup removed before response
+    if (loaderContainer) loaderContainer.style.display = 'none'; // Hide loader
+    
+    const sourceEl = popupContentContainer.querySelector('.translation-source');
+    if (sourceEl && response && response.source) {
+        sourceEl.textContent = `(${response.source})`;
+        sourceEl.style.display = 'block';
+    }
+
     if (chrome.runtime.lastError) {
       console.error("Runtime error:", chrome.runtime.lastError.message);
-      if (localPopup) localPopup.innerHTML = `Error: ${chrome.runtime.lastError.message}`;
+      setTextContent(popupContentContainer, '.translation-error-message', `Error: ${chrome.runtime.lastError.message}`);
       return;
     }
     
     if (response) {
-      // Response.translation can now be an object (from local, gemini_structured, local_fallback) or string (gemini_simple)
-      // Response.source tells us where it came from
       if (response.translation) {
-        if ( (typeof response.translation === 'object' && 
-              (response.source === 'local' || response.source === 'gemini_structured' || response.source === 'local_fallback') ) ) {
-          // Handle rich translation from local dictionary, structured JSON from Gemini, or local fallback
-          localPopup.innerHTML = buildRichTranslationHtml(response.translation, text);
-          
-          const copyButton = document.querySelector('[data-action="copy-translation"]');
-          const translation = document.getElementById('translation');
-          const check = document.getElementById('check-symbol');
+        const richDetailsContainer = popupContentContainer.querySelector('.rich-translation-details');
+        const simpleTextContainer = popupContentContainer.querySelector('.translation-simple-text');
 
-          async function copyTranslationToClipboard(text){
-            try{
-              await navigator.clipboard.writeText(text);
-              console.log("translation successfully copied to clipboard!");
-              check.textContent = "✓";
-            }catch(err){
-              console.error('Failed to copy plain text: ', err);
-            }finally{
-              setTimeout(()=>{
-                check.textContent = '';
-              }, 3000);
+        if (richDetailsContainer && simpleTextContainer) {
+            if (typeof response.translation === 'object' && 
+                (response.source === 'local' || response.source === 'gemini_structured' || response.source === 'local_fallback')) {
+                
+                richDetailsContainer.style.display = 'block';
+                simpleTextContainer.style.display = 'none';
+
+                const data = response.translation;
+                setTextContent(popupContentContainer, '.translation-word[data-field="reading_jp"]', data.reading_jp || text);
+                setTextContent(popupContentContainer, '.translation-romaji[data-field="reading_romaji"]', data.reading_romaji);
+                setTextContent(popupContentContainer, '.translation-pos[data-field="part_of_speech"]', data.part_of_speech);
+                setTextContent(popupContentContainer, '.translation-definition[data-field="definition_en"]', data.definition_en);
+                setTextContent(popupContentContainer, '.translation-explanation-jp[data-field="explanation_jp"]', data.explanation_jp);
+                
+                const exampleEnEl = popupContentContainer.querySelector('.translation-example-en[data-field="example_en"]');
+                const exampleJpEl = popupContentContainer.querySelector('.translation-example-jp[data-field="example_jp"]');
+                const exampleSection = popupContentContainer.querySelector('.example-section');
+
+                if (data.example_en && exampleEnEl && exampleJpEl && exampleSection) {
+                    exampleEnEl.textContent = data.example_en;
+                    exampleEnEl.style.display = '';
+                    if (data.example_jp) {
+                        exampleJpEl.textContent = `→ ${data.example_jp}`;
+                        exampleJpEl.style.display = '';
+                    } else {
+                        exampleJpEl.style.display = 'none';
+                    }
+                    exampleSection.style.display = 'block';
+                } else if (exampleSection) {
+                    exampleSection.style.display = 'none';
+                }
+
+                // Handle copy button
+                const copyButton = popupContentContainer.querySelector('.copy-translation-btn');
+                const checkSymbol = popupContentContainer.querySelector('.check-symbol[data-field="check_symbol"]');
+                if (copyButton) {
+                    copyButton.onclick = () => { // Use onclick for dynamically added content or re-add listener
+                        const translationText = popupContentContainer.querySelector('.translation-word[data-field="reading_jp"]');
+                        if (translationText && translationText.textContent) {
+                            navigator.clipboard.writeText(translationText.textContent).then(() => {
+                                if(checkSymbol) checkSymbol.textContent = "✓";
+                                setTimeout(() => { if(checkSymbol) checkSymbol.textContent = ''; }, 3000);
+                            }).catch(err => console.error('Failed to copy: ', err));
+                        }
+                    };
+                }
+
+            } else if (typeof response.translation === 'string') { 
+                richDetailsContainer.style.display = 'none';
+                simpleTextContainer.style.display = 'block';
+                simpleTextContainer.textContent = response.translation;
+            } else {
+                setTextContent(popupContentContainer, '.translation-error-message', 'Error: Unexpected translation format.');
             }
-          }
-
-          if(copyButton && translation && check){
-            copyButton.addEventListener('click', ()=>{
-              copyTranslationToClipboard(translation.innerText);
-            })
-          }
-
-        } else if (typeof response.translation === 'string') { // From proxy (gemini_simple) or old cache format
-          localPopup.innerHTML = `<div class="translation-simple">${response.translation}</div> <small>(${response.source || 'unknown'})</small>`;
-        } else {
-           localPopup.innerHTML = 'Error: Unexpected translation format received.';
         }
       } else if (response.error) {
-        localPopup.innerHTML = `Error: ${response.error} <small>(${response.source || 'proxy'})</small>`;
+        setTextContent(popupContentContainer, '.translation-error-message', `Error: ${response.error}`);
       } else {
-        localPopup.innerHTML = 'Error: Unexpected response.';
+        setTextContent(popupContentContainer, '.translation-error-message', 'Error: Unexpected response.');
       }
     } else {
-      localPopup.innerHTML = 'Error: No response from background.';
+      setTextContent(popupContentContainer, '.translation-error-message', 'Error: No response from background.');
     }
     
     if (localPopup.style.display === 'block') {
-      positionPopup(localPopup, parseFloat(localPopup.style.left || 0), parseFloat(localPopup.style.top || 0), eventForPositioning); // Re-position with content
+      positionPopup(localPopup, parseFloat(localPopup.style.left || 0), parseFloat(localPopup.style.top || 0), eventForPositioning);
     }
   });
 }
 
-// Function to build HTML for rich translation data
-function buildRichTranslationHtml(data, originalWord) {
-  // Sanitize data before putting into HTML to prevent XSS if data could be user-generated or from less trusted source
-  // For now, assuming dictionary.json is trusted.
-  
-  let html = '<div class="translation-rich">';
-  
-  // Word and Readings
-  html += '<div class="translation-header">';
-  html +=   `<div class="translation-word">
-                <div id="translation">${data.reading_jp || originalWord}</div>
-                <div class="to-copy">
-                  <p id="check-symbol"></p>
-                  <button class="translation-action-btn" data-action="copy-translation">📎</button>
-                </div>
-            </div>`;
-  if (data.reading_romaji) {
-    html +=   `<div class="translation-romaji">(${data.reading_romaji})</div>`;
+// Helper to set text and display for an element
+function setTextContent(parentElement, selector, text, isHtml = false) {
+  const element = parentElement.querySelector(selector);
+  if (element) {
+    if (text) {
+      if (isHtml) element.innerHTML = text; else element.textContent = text;
+      // Try to show the element itself and its relevant section parent if it has one
+      element.style.display = ''; 
+      let section = element.closest('.definition-section, .explanation-jp-section, .example-section, .translation-header, .translation-pos, .translation-footer');
+      if (section) section.style.display = '';
+    } else {
+      element.style.display = 'none';
+    }
   }
-  html += '</div>';
+}
 
-  // Part of Speech
-  if (data.part_of_speech) {
-    html += `<div class="translation-pos">(${data.part_of_speech})</div>`;
-  }
-
-  // Definition
-  if (data.definition_en) {
-    html += '<div class="translation-section-header">📝 Definition</div>';
-    html += `<div class="translation-definition">${data.definition_en}</div>`;
-  }
-
-  // Explanation in Japanese
-  if (data.explanation_jp) {
-    html += '<div class="translation-section-header">💡 Explanation (Japanese)</div>';
-    html += `<div class="translation-explanation-jp">${data.explanation_jp}</div>`;
-  }
-  
-  // Example Sentence
-  if (data.example_en && data.example_jp) {
-    html += '<div class="translation-section-header">📘 Example Sentence</div>';
-    html += '<div class="translation-example">';
-    html +=   `<div class="translation-example-en">"${data.example_en}"</div>`;
-    html +=   `<div class="translation-example-jp">→ ${data.example_jp}</div>`;
-    html += '</div>';
-  }
-
-  // Footer actions (placeholders for now)
-  html += '<div class="translation-footer">';
-  if (data.audio_url) { // Placeholder, audio not implemented yet
-    html +=   '<button class="translation-action-btn" data-action="play-audio">🔊 Play</button>';
-  }
-  html += '</div>';
-  
-  html += '</div>'; // close translation-rich
-  return html;
+function resetPopupState(popupContainer) {
+    // Hide all dynamic content sections/elements initially
+    const elementsToHideSelectors = [
+        '.readoku-loader-container',
+        '.translation-simple-text',
+        '.rich-translation-details',
+        '.translation-romaji',
+        '.translation-pos',
+        '.definition-section',
+        '.explanation-jp-section',
+        '.example-section',
+        '.translation-example-jp',
+        '.translation-footer',
+        '.translation-error-message',
+        '.translation-source'
+    ];
+    elementsToHideSelectors.forEach(selector => {
+        const el = popupContainer.querySelector(selector);
+        if (el) el.style.display = 'none';
+    });
+    // Clear text from fields
+    const fieldsToClear = popupContainer.querySelectorAll('[data-field]');
+    fieldsToClear.forEach(field => {
+        if(field.tagName === 'BUTTON' || field.classList.contains('check-symbol')) {
+            if(field.dataset.field === 'check_symbol') field.textContent = '';
+        } else {
+            field.textContent = '';
+        }
+    });
 }
 
 // Function to hide the popup
@@ -428,85 +498,101 @@ function hideSelectionActionButton() {
 // Debounced mousemove handler
 function handleMouseMove(event) {
   if (!isExtensionEnabled || !isShiftHeld) {
-    if (popup && popup.style.display !== 'none' && !popup.matches(':hover')) {
+    // If modifier is not held, clear any programmatic selection
+    if (lastSelectedRange) {
+        window.getSelection().removeAllRanges();
+        lastSelectedRange = null;
     }
     return;
   }
 
-  // Debounce hover detection
   clearTimeout(hoverDetectionTimeout);
   hoverDetectionTimeout = setTimeout(() => {
-    const element = document.elementFromPoint(event.clientX, event.clientY);
-    const caretPos = document.caretPositionFromPoint(event.clientX, event.clientY);
-    if (element) {
-      const word = getWordAtPoint(element, event.clientX, event.clientY);
-      if (word && word !== lastHoveredWord) {
-        lastHoveredWord = word;
-        console.log("Shift-hovered word:", word);
-        showTranslation(word, event, 'word'); // Specify 'word' mode
-      } else if (!word && lastHoveredWord) {
-        // Moved off a word, clear lastHoveredWord to allow re-triggering on same word if moused back over
-        lastHoveredWord = "";
-        // Optionally hide popup if mouse moves to non-word area
-        hidePopup(); 
-      }
+    // Logic for translation popup (your existing logic)
+    const elementForTranslation = document.elementFromPoint(event.clientX, event.clientY);
+    const wordForTranslation = getWordAtPoint(elementForTranslation, event.clientX, event.clientY);
+    if (wordForTranslation && wordForTranslation !== lastHoveredWord) {
+      lastHoveredWord = wordForTranslation;
+      showTranslation(wordForTranslation, event, 'word');
+    } else if (!wordForTranslation && lastHoveredWord) {
+      lastHoveredWord = "";
+      // Optional: consider if popup should hide here. Current logic hides on click-outside/modifier-up.
+      // hidePopup(); 
     }
-    if (caretPos && caretPos.offsetNode) { // Check if caretPos and its node are valid
-      const node = caretPos.offsetNode;
-      const offset = caretPos.offset;
-      console.log("Node:", node, "Offset:", offset, "Node type:", node.nodeType); // Debug log
 
-      // Ensure we are in a text node (nodeType === 3)
-      if (node.nodeType === Node.TEXT_NODE) {
-        const wordBoundaries = findWordBoundariesInTextNode(node, offset);
-        console.log("Word boundaries found:", wordBoundaries); // Debug log
+    // New logic for highlighting word under cursor
+    if (typeof document.caretPositionFromPoint === 'function') {
+        const caretPos = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if (caretPos && caretPos.offsetNode) {
+            const node = caretPos.offsetNode;
+            const offset = caretPos.offset;
 
-        if (wordBoundaries) {
-          const newRange = document.createRange();
-          newRange.setStart(node, wordBoundaries.start);
-          newRange.setEnd(node, wordBoundaries.end);
+            if (node.nodeType === Node.TEXT_NODE) {
+                const wordBoundaries = findWordBoundariesInTextNode(node, offset);
+                if (wordBoundaries) {
+                    const newRange = document.createRange();
+                    newRange.setStart(node, wordBoundaries.start);
+                    newRange.setEnd(node, wordBoundaries.end);
 
-          const selection = window.getSelection();
+                    const selection = window.getSelection();
+                    let isSameAsCurrentSelection = false;
+                    if (selection.rangeCount > 0) {
+                        const currentDOMSelection = selection.getRangeAt(0);
+                        if (currentDOMSelection.startContainer === newRange.startContainer &&
+                            currentDOMSelection.endContainer === newRange.endContainer &&
+                            currentDOMSelection.startOffset === newRange.startOffset &&
+                            currentDOMSelection.endOffset === newRange.endOffset) {
+                            isSameAsCurrentSelection = true;
+                        }
+                    }
+                    
+                    // Only update selection if it's different from the current DOM selection
+                    // and also different from our last programmatically set range (to avoid flicker if caretPos is unstable)
+                    let isSameAsLastProgrammaticSelection = false;
+                    if (lastSelectedRange) {
+                        if (lastSelectedRange.startContainer === newRange.startContainer &&
+                            lastSelectedRange.endContainer === newRange.endContainer &&
+                            lastSelectedRange.startOffset === newRange.startOffset &&
+                            lastSelectedRange.endOffset === newRange.endOffset) {
+                            isSameAsLastProgrammaticSelection = true;
+                        }
+                    }
 
-          let isSameSelection = false;
-          if (lastSelectedRange && selection.rangeCount > 0) {
-              const currentSelection = selection.getRangeAt(0);
-              if (currentSelection.startContainer === newRange.startContainer &&
-                  currentSelection.endContainer === newRange.endContainer &&
-                  currentSelection.startOffset === newRange.startOffset &&
-                  currentSelection.endOffset === newRange.endOffset) {
-                  isSameSelection = true;
-              }
-          }
-
-          if (!isSameSelection) {
-              selection.removeAllRanges();
-              selection.addRange(newRange);
-              lastSelectedRange = newRange; // Store the new range
-              console.log("Selected word:", node.textContent.substring(wordBoundaries.start, wordBoundaries.end)); // Debug log
-          }
+                    if (!isSameAsCurrentSelection && !isSameAsLastProgrammaticSelection) {
+                        selection.removeAllRanges();
+                        selection.addRange(newRange.cloneRange());
+                        lastSelectedRange = newRange; 
+                    }
+                } else {
+                    // No word boundaries found at this point, clear our programmatic selection
+                    if (lastSelectedRange) {
+                        const selection = window.getSelection();
+                        // Check if the current selection is the one we made
+                        if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)){
+                             selection.removeAllRanges();
+                        }
+                        lastSelectedRange = null;
+                    }
+                }
+            } else {
+                // Not a text node, clear our programmatic selection
+                if (lastSelectedRange) {
+                    const selection = window.getSelection();
+                     if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)){
+                         selection.removeAllRanges();
+                     }
+                    lastSelectedRange = null;
+                }
+            }
         } else {
-          console.log("No word boundaries found at this point."); // Debug log
-          // No word found at mouse position, clear selection if one exists from this feature
-          if (lastSelectedRange) {
-            window.getSelection().removeAllRanges();
-            lastSelectedRange = null;
-          }
-        }
-      } else {
-         console.log("Not a text node. Node type:", node.nodeType, "Node content:", node.textContent); // Debug log
-         // If it's not a text node (e.g., an element node), clear previous selection
-         if (lastSelectedRange) {
-           window.getSelection().removeAllRanges();
-           lastSelectedRange = null;
-         }
-      }
-    } else {
-        console.log("caretPositionFromPoint returned null or invalid object."); // Debug log
-        // If the position is invalid, clear previous selection
-        if (lastSelectedRange) {
-            window.getSelection().removeAllRanges();
-            lastSelectedRange = null;
+            // caretPositionFromPoint returned null, clear our programmatic selection
+            if (lastSelectedRange) {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)){
+                    selection.removeAllRanges();
+                }
+                lastSelectedRange = null;
+            }
         }
     }
   }, HOVER_DEBOUNCE_DELAY);
@@ -562,17 +648,30 @@ function handleKeyDown(event) {
 function handleKeyUp(event) {
   if (event.key === currentModifierKey) {
     isShiftHeld = false;
-    // If shift is released, NO LONGER hide the hover-triggered popup here.
-    // Hiding is now solely managed by handleMouseDown (click outside) or when extension is disabled.
-    // if (popup && popup.style.display === 'block' /*&& !isSelectionPopup() for example */) {
-    //     hidePopup();
-    // }
-    window.getSelection.removeAllRanges();
-    lastSelectedRange = null;
-    if (hoverDetectionTimeout) { // Clear any pending hover detection
+    if (hoverDetectionTimeout) {
         clearTimeout(hoverDetectionTimeout);
         hoverDetectionTimeout = null;
     }
+    // Clear the programmatic selection when modifier key is released
+    if (lastSelectedRange) {
+        const selection = window.getSelection();
+        // Only remove if it's the range we created (or if no selection exists which shouldn't be the case)
+        // This check might be overly cautious but prevents clearing user's own selection if logic gets complex.
+        // A simpler window.getSelection().removeAllRanges(); might be fine too.
+        if (selection.rangeCount > 0 && selection.getRangeAt(0).isEqualNode(lastSelectedRange)) {
+            selection.removeAllRanges();
+        } else if (selection.rangeCount === 0 && lastSelectedRange) {
+            // If there's no selection but we thought we had one, just clear our record
+        }
+        // More robustly, if we want to ensure *any* selection is cleared that might have been ours:
+        // window.getSelection().removeAllRanges(); 
+        // For now, let's be specific if possible, or just clear all if the above is too complex.
+        // Given the flow, a general removeAllRanges is probably fine here if isShiftHeld was true.
+        window.getSelection().removeAllRanges(); 
+        lastSelectedRange = null;
+    }
+    // Note: The decision to hide the popup here was removed previously in your code,
+    // as popup hiding is managed by handleMouseDown or extension disabling.
   }
 }
 
@@ -651,4 +750,28 @@ function handleMouseDown(event) {
       !(popup && popup.contains(event.target))) {
     hideSelectionActionButton();
   }
+}
+
+async function fetchPopupHtmlStructure() {
+  if (!popupContentCache) {
+    try {
+      const response = await fetch(chrome.runtime.getURL('translation-popup/translation-popup.html'));
+      if (!response.ok) {
+        throw new Error(`Failed to fetch popup HTML: ${response.statusText}`);
+      }
+      const text = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'text/html');
+      popupContentCache = doc.querySelector('#readoku-popup-content'); // Get the main content div
+      if (!popupContentCache) {
+        console.error("Readoku: #readoku-popup-content not found in fetched HTML.");
+        return null;
+      }
+    } catch (error) {
+      console.error("Readoku: Error fetching popup HTML structure:", error);
+      popupContentCache = null; // Ensure it can be retried if needed, or handle error more gracefully
+      return null;
+    }
+  }
+  return popupContentCache.cloneNode(true); // Return a clone to avoid issues with re-injection
 }
