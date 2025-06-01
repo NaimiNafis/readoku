@@ -1,6 +1,7 @@
 let dictionary = {};
 let cache = {}; // TODO: Implement cache eviction strategy
 const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+const GEMINI_PROXY_URL = 'http://localhost:5001/translate-gemini';
 
 // Load dictionary on startup
 fetch(chrome.runtime.getURL('dictionary.json'))
@@ -28,6 +29,40 @@ chrome.runtime.onInstalled.addListener(() => {
     }
   });
 });
+
+// Helper function to fetch from the Gemini proxy server
+async function fetchFromProxy(requestBody, callSource = 'translate') {
+  try {
+    const response = await fetch(GEMINI_PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => null);
+      const errorMessage = errorBody?.errorMessage || errorBody?.error || `Proxy request failed with status: ${response.status}`;
+      console.warn(`Error from Gemini proxy (${callSource}, HTTP ${response.status}):`, errorMessage, errorBody);
+      // Return a structured error that includes the original errorBody if available
+      return { error: errorMessage, details: errorBody, source: `gemini_proxy_http_error` };
+    }
+    return await response.json(); // This could be success data or an error object from the proxy's own handling
+  } catch (networkError) {
+    console.error(`Network error calling Gemini proxy (${callSource}):`, networkError);
+    return { error: networkError.message || "Failed to connect to Gemini proxy", source: `gemini_proxy_network_error` };
+  }
+}
+
+// Helper to handle local dictionary fallback for 'word' mode
+function attemptLocalFallback(textKey, sendResponseCallback) {
+  if (dictionary[textKey] && !textKey.includes(' ')) {
+    console.log("Gemini failed or N/A, local dictionary hit for:", textKey);
+    const richTranslationData = dictionary[textKey];
+    cache[textKey] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local_fallback' };
+    sendResponseCallback({ translation: richTranslationData, source: 'local_fallback' });
+    return true;
+  }
+  return false;
+}
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "TOGGLE_EXTENSION") {
@@ -60,89 +95,41 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    // 2. Attempt Gemini translation
-    console.log("Calling Gemini proxy for:", textToTranslate, "Mode:", translationMode);
-    const geminiProxyUrl = 'http://localhost:5001/translate-gemini';
     const requestBody = {
-      prompt: textToTranslate, // Send original case text
+      prompt: textToTranslate,
       targetLanguage: "ja",
       translationMode: translationMode
     };
 
-    fetch(geminiProxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    })
-      .then(response => {
-        if (!response.ok) {
-          return response.json().catch(() => null).then(errorBody => {
-            const errorMessage = errorBody?.errorMessage || errorBody?.error || `Proxy request failed with status: ${response.status}`;
-            // Do not throw here, instead, pass the error information to the next .then block
-            return { error: errorMessage, status: response.status, source: 'gemini_proxy_error' };
-          });
-        }
-        return response.json(); // This will be the actual translation data or an error object from the proxy's own error handling
-      })
-      .then(data => {
-        if (data.error && data.source === 'gemini_proxy_error') { // Error from fetch non-ok response
-          console.warn("Error from Gemini proxy (fetch non-ok):", data.error, "Status:", data.status);
-          // Proceed to local dictionary lookup if it was a word translation
-          if (translationMode === 'word' && dictionary[textKey] && !textKey.includes(' ')) {
-            console.log("Gemini failed, local dictionary hit for:", textKey);
-            const richTranslationData = dictionary[textKey];
-            cache[textKey] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local_fallback' };
-            sendResponse({ translation: richTranslationData, source: 'local_fallback' });
-          } else {
-            sendResponse({ error: data.error, source: 'gemini' }); // Send original Gemini error if not word or not in dict
-          }
-        } else if (data.error) { // Error explicitly sent by the proxy (e.g., Gemini returned error, or proxy itself had an issue)
-          console.warn("Error explicitly sent from Gemini proxy:", data.error, "Raw data:", data);
-          if (translationMode === 'word' && dictionary[textKey] && !textKey.includes(' ')) {
-            console.log("Gemini failed (explicit error), local dictionary hit for:", textKey);
-            const richTranslationData = dictionary[textKey];
-            cache[textKey] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local_fallback' };
-            sendResponse({ translation: richTranslationData, source: 'local_fallback' });
-          } else {
-            sendResponse({ error: data.error, source: 'gemini', raw_proxy_response: data });
-          }
-        } else { // Successful response from Gemini/proxy
-          if (translationMode === 'word' && typeof data === 'object') {
-            console.log("Gemini structured success for:", textKey);
-            cache[textKey] = { data: data, timestamp: Date.now(), source_type: 'gemini_structured' };
-            sendResponse({ translation: data, source: 'gemini_structured' });
-          } else if (translationMode === 'phrase' && data.translatedText) {
-            console.log("Gemini simple success for:", textKey);
-            cache[textKey] = { data: data.translatedText, timestamp: Date.now(), source_type: 'gemini_simple' };
-            sendResponse({ translation: data.translatedText, source: 'gemini_simple' });
-          } else {
-            // This case handles if 'word' mode didn't return an object or 'phrase' mode didn't return 'translatedText'
-            console.warn("Unexpected response structure from Gemini proxy, falling back to local for word or error for phrase. Data:", data);
-            if (translationMode === 'word' && dictionary[textKey] && !textKey.includes(' ')) {
-              console.log("Gemini unexpected, local dictionary hit for:", textKey);
-              const richTranslationData = dictionary[textKey];
-              cache[textKey] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local_fallback' };
-              sendResponse({ translation: richTranslationData, source: 'local_fallback' });
-            } else {
-              sendResponse({ error: "Unexpected response structure from Gemini proxy.", source: 'gemini', raw_proxy_response: data });
-            }
-          }
-        }
-      })
-      .catch(error => { // Network error or other issues with fetch itself
-        console.error("Fetch Error calling Gemini proxy:", error);
-        // Attempt local dictionary lookup for 'word' mode as a fallback
-        if (translationMode === 'word' && dictionary[textKey] && !textKey.includes(' ')) {
-          console.log("Gemini fetch failed, local dictionary hit for:", textKey);
-          const richTranslationData = dictionary[textKey];
-          cache[textKey] = { data: richTranslationData, timestamp: Date.now(), source_type: 'local_fallback' };
-          sendResponse({ translation: richTranslationData, source: 'local_fallback' });
-        } else {
-          sendResponse({ error: error.message || "Failed to connect to Gemini proxy", source: 'gemini_network_error' });
-        }
-      });
+    (async () => {
+      const data = await fetchFromProxy(requestBody, 'translate');
 
-    return true; // Indicates that the response is sent asynchronously
+      if (data.error) { // Handles network errors and non-ok HTTP responses from proxy, or explicit error from proxy's logic
+        console.warn("Error received from/via proxy (translate):", data.error, "Details:", data.details);
+        if (translationMode === 'word' && attemptLocalFallback(textKey, sendResponse)) {
+          return; // Local fallback was successful and sent a response
+        }
+        // No local fallback or it failed, send the error from proxy
+        sendResponse({ error: data.error, details: data.details, source: data.source || 'gemini_proxy' });
+      } else { // Successful response from Gemini/proxy (data is the parsed JSON from proxy)
+        if (translationMode === 'word' && typeof data === 'object') {
+          console.log("Gemini structured success for:", textKey);
+          cache[textKey] = { data: data, timestamp: Date.now(), source_type: 'gemini_structured' };
+          sendResponse({ translation: data, source: 'gemini_structured' });
+        } else if (translationMode === 'phrase' && data.translatedText) {
+          console.log("Gemini simple success for:", textKey);
+          cache[textKey] = { data: data.translatedText, timestamp: Date.now(), source_type: 'gemini_simple' };
+          sendResponse({ translation: data.translatedText, source: 'gemini_simple' });
+        } else {
+          console.warn("Unexpected response structure from Gemini proxy. Data:", data);
+          if (translationMode === 'word' && attemptLocalFallback(textKey, sendResponse)) {
+            return; // Local fallback successful
+          }
+          sendResponse({ error: "Unexpected response structure from Gemini proxy.", details: data, source: 'gemini_proxy_unexpected_structure' });
+        }
+      }
+    })();
+    return true; // Indicates asynchronous response
   } else if (request.action === "GET_EXTENSION_STATE") {
     chrome.storage.local.get(['extensionEnabled'], function (result) {
       const isEnabled = result.extensionEnabled === undefined ? true : result.extensionEnabled;
@@ -157,43 +144,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     console.log("Calling Gemini proxy for dictionary search (EN->JA focused, server-defined prompt):", searchQuery);
-    const geminiProxyUrl = 'http://localhost:5001/translate-gemini'; 
 
     const requestBody = {
-      prompt: searchQuery, // Only send the query text
-      translationMode: 'dictionaryLookup' // Server uses this to select the correct detailed prompt and expect JSON
+      prompt: searchQuery,
+      translationMode: 'dictionaryLookup'
     };
 
-    fetch(geminiProxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody)
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().catch(() => null).then(errorBody => {
-                const errorMessage = errorBody?.errorMessage || errorBody?.error || `Proxy request failed: ${response.status}`;
-                return { error: errorMessage, status: response.status, source: 'gemini_search_proxy_error' }; 
-            });
-        }
-        // For dictionary lookup, we might expect JSON or structured text.
-        // The server side needs to be adjusted to handle 'dictionaryLookup' mode.
-        return response.json(); // Assuming server will send back JSON for this mode too.
-    })
-    .then(data => {
-        if (data.error) {
-            console.warn("Error from Gemini search:", data.error);
-            sendResponse({ error: data.error, details: data.details || data.raw_gemini_text || data, source: 'gemini_search' });
-        } else {
-            console.log("Gemini search success for:", searchQuery);
-            // The data itself is the result. It could be an object or a pre-formatted string from Gemini.
-            sendResponse({ result: data, source: 'gemini_search' }); 
-        }
-    })
-    .catch(error => {
-      console.error("Fetch Error calling Gemini for search:", error);
-      sendResponse({ error: error.message || "Failed to connect to Gemini for search", source: 'gemini_search_network_error' });
-    });
+    (async () => {
+      const data = await fetchFromProxy(requestBody, 'geminiSearch');
+
+      if (data.error) {
+        console.warn("Error from Gemini search proxy call:", data.error, "Details:", data.details);
+        sendResponse({ error: data.error, details: data.details, source: data.source || 'gemini_search_proxy' });
+      } else {
+        console.log("Gemini search success for:", searchQuery);
+        sendResponse({ result: data, source: 'gemini_search' });
+      }
+    })();
     return true; // Asynchronous response
   }
 });

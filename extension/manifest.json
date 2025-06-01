@@ -21,14 +21,15 @@
         "content.js"
       ],
       "css": [
-        "popup.css"
+        "translation-popup/translation-popup.css"
       ]
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "dictionary.json"
+        "dictionary.json",
+        "translation-popup/translation-popup.html"
       ],
       "matches": [
         "<all_urls>"
