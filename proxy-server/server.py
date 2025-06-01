@@ -15,7 +15,7 @@ load_dotenv()
 app = Flask(__name__)
 
 gemini_session = requests.Session()
-translation_cache = LRUCache(maxsize=500)
+translation_cache = LRUCache(maxsize=1000)
 GEMINI_API_TIMEOUT = 15
 # Load API key from environment variable
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
