@@ -234,7 +234,7 @@ async function showTranslation(text, eventForPositioning, translationMode = 'wor
     const sourceEl = popupContentContainer.querySelector('.translation-source');
     if (sourceEl && response && response.source) {
         sourceEl.textContent = `(${response.source})`;
-        sourceEl.style.display = 'block';
+        sourceEl.style.display = 'none';
     }
 
     if (chrome.runtime.lastError) {
