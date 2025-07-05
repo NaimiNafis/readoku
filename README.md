@@ -1,86 +1,122 @@
 [日本語の説明はこちら](README-ja.md) (Japanese version available)
 
-# Readoku - Your Instant Japanese Translation Companion
+# 📚 Readoku
 
-Readoku is a browser extension designed to help users quickly understand the translation of any English sentences or words into Japanese. 
+<p align="center">
+  <img src="assets/banner.png" alt="Readoku Banner">
+</p>
 
-## Current Status & Features
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/status-active-brightgreen.svg" alt="Project Status">
+  <img src="https://img.shields.io/badge/chrome-v1.0-orange.svg" alt="Chrome Version">
+  <img src="https://img.shields.io/badge/firefox-v1.0-orange.svg" alt="Firefox Version">
+</p>
 
-*   **Dual Translation Modes:**
-    *   **Detailed Word Lookup (Shift + Hover)**: Hold the `Shift` key and hover over an English word. A popup will appear with a detailed breakdown from the Gemini API, including:
-        *   Reading (Hiragana/Katakana)
-        *   Romaji reading
-        *   Part of speech
-        *   English definition
-        *   Japanese explanation
-        *   Example sentences (English and Japanese)
-        *   The response is requested as JSON for rich display.
-    *   **Phrase/Sentence Translation (Highlight & Click)**: Highlight any text (Japanese, English, etc.), and a small Readoku button (R⚡) will appear at the end of the selection. Click this button to translate the highlighted text into Japanese in a popup.
-*   **Gemini API Powered**: Utilizes the Google Gemini API via a local proxy server for powerful and nuanced translations.
-*   **Local Dictionary Fallback**: For single-word lookups (Shift + Hover), if the Gemini API call fails, the extension will attempt to find the word in a local dictionary (`scripts/`) for a basic definition.
-*   **Secure API Key Handling**: The Gemini API key is managed securely using environment variables and is not stored in the codebase.
-*   **Extension Enable/Disable**: Users can toggle the extension on or off via the extension's popup menu in the browser toolbar.
+Readoku is a browser extension for seamless English-to-Japanese translation, powered by the Gemini API. It was created to bridge the language gap for students, professionals, and language learners who need instant, context-aware translations directly within their browser without disrupting their workflow.
 
-## Setup & Installation
+## ✨ Features
 
-To get Readoku up and running, you'll need to set up both the extension and the local proxy server.
+### 🔍 Detailed Word Lookup (Shift + Hover)
+
+<p align="center">
+  <img src="assets/exp2.gif" alt="Translation Examples">
+</p>
+
+- Hold `Shift` and hover over an English word
+- Get detailed breakdowns including readings, definitions, and example sentences
+- Powered by Gemini AI for accurate translations
+
+### 🌐 Phrase/Sentence Translation (Highlight & Click)
+
+<p align="center">
+  <img src="assets/exp1.gif" alt="More Examples">
+</p>
+
+- Highlight any text and click the Readoku button (R⚡)
+- Instantly translate highlighted text to Japanese
+
+### 🧩 Additional Features
+- **Gemini API Powered** for nuanced translations
+- **Local Dictionary Fallback** when the API is unavailable
+- **Secure API Key Handling** via environment variables
+- **Simple Enable/Disable** option in browser toolbar
+
+## 🖥️ System Architecture
+
+Readoku operates with a simple but effective two-part architecture:
+
+- **Browser Extension (Frontend)**: The user-facing component built with HTML, CSS, and JavaScript. It captures user interactions (hover, highlight), displays the UI, and sends requests.
+- **Proxy Server (Backend)**: A lightweight Python Flask server that securely manages the Gemini API key. It receives requests from the browser extension, forwards them to the Gemini API, and returns the translation. This prevents exposing the API key in the client-side code.
+
+<p align="center">
+  <img src="assets/systemconfig.png" alt="System Configuration">
+</p>
+
+## 🚀 Quick Setup
 
 ### 1. Proxy Server Setup
 
-The proxy server handles communication with the Gemini API.
+The proxy server handles secure communication with the Gemini API.
 
-1.  **Navigate to the `proxy-server` directory:**
-    ```bash
-    cd proxy-server
-    ```
-2.  **Create a Python Virtual Environment (Recommended):**
-    ```bash
-    python -m venv .venv  # or python3 -m venv .venv
-    source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
-    ```
-3.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt  # or pip3 install -r requirements.txt
-    ```
-4.  **Obtain a Gemini API Key:**
-    *   Go to [Google AI Studio](https://aistudio.google.com/app/apikey) (or your Google Cloud Console).
-    *   Create a **new API key**.
-    *   **Important: Restrict your API key** to only allow access to the "Generative Language API" (or the specific Gemini model you are using, e.g., `gemini-1.5-flash`).
-5.  **Set the API Key as an Environment Variable:**
-    In your terminal, before running the server, set the `GEMINI_API_KEY` environment variable:
-    ```bash
-    export GEMINI_API_KEY="YOUR_NEW_RESTRICTED_API_KEY"
-    ```
-    Replace `"YOUR_NEW_RESTRICTED_API_KEY"` with the actual key you obtained.
-    *(For persistent storage, consider adding this to your shell's configuration file like `~/.zshrc` or `~/.bashrc`, and ensure that file is not committed to Git).*
-6.  **Run the Proxy Server:**
-    ```bash
-    python server.py
-    ```
-    The server should now be running, typically on `http://localhost:5001`.
+```bash
+# Navigate to the server directory
+cd proxy-server
+
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
+
+# Install dependencies
+pip3 install -r requirements.txt
+```
+
+**Set up your API Key:**
+
+Create a file named `.env` in the proxy-server directory and add your API key:
+```
+GEMINI_API_KEY="YOUR_API_KEY_HERE"
+```
+
+The server will automatically load this key. This is safer than exporting it to your shell.
+
+Run the server:
+```bash
+python3 server.py
+```
+
+The server will start on http://localhost:5001.
 
 ### 2. Browser Extension Installation
 
-1.  **Clone the Repository**: If you haven't already, clone this repository.
-2.  **Open Your Browser's Extension Management Page:**
-    *   **Chrome/Edge**: Navigate to `chrome://extensions`
-    *   **Firefox**: Navigate to `about:debugging#/runtime/this-firefox`
-3.  **Enable Developer Mode:**
-    *   **Chrome/Edge**: Toggle "Developer mode" on (usually in the top right).
-    *   **Firefox**: This is usually enabled by default on the `about:debugging` page.
-4.  **Load the Extension:**
-    *   **Chrome/Edge**: Click "Load unpacked" and select the `extension` directory from this repository.
-    *   **Firefox**: Click "Load Temporary Add-on..." and select the `manifest.json` file inside the `extension` directory.
-5.  The Readoku icon should appear in your browser's toolbar.
+- **Chrome/Edge**: Load unpacked from `extension` directory via `chrome://extensions` (Developer mode)
+- **Firefox**: Load temporary add-on from `extension/manifest.json` via `about:debugging`
 
-## Testing Specific Functionality
+## ✅ Usage
 
-*   **Detailed Word Lookup**:
-    *   Ensure the proxy server is running with a valid API key.
-    *   Open any webpage with English text.
-    *   Hold `Shift` and hover over a English word. You should see a detailed popup.
-    *   If the API fails, and the word exists in `extension/dictionary.json` (e.g., "Japan"), you might see a simpler fallback translation.
-*   **Phrase/Sentence Translation**:
-    *   Highlight any text (e.g., an English sentence like "Hello, how are you?").
-    *   A small "R⚡" button should appear near your selection.
-    *   Click the button. The popup should display the Japanese translation of the highlighted text.
+Once the extension is installed and the server is running:
+
+- **Detailed Word Lookup**: Hold `Shift` and hover over any English word on a webpage. A popup will appear with detailed definitions.
+- **Sentence Translation**: Highlight a phrase or sentence, and click the Readoku (R⚡) button that appears nearby.
+
+## 💡 Contributing
+
+Contributions are welcome! For more details about the app's architecture and implementation, check [appcore.md](appcore.md).
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📩 Contact
+
+Naimi Nafis: [Github](https://github.com/NaimiNafis) | [Portfolio](https://naiminafis.github.io/portfolio/)
+
+Alvin Sebastian Lienardi: [Github](https://github.com/alvinlienardi) | [Portfolio](https://alvinlienardi.github.io/portfolio/)
+
+Duong Nam Phong: [Github](https://github.com/duongnphong) | [Portfolio](https://duongnphong.github.io/)

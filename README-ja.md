@@ -1,77 +1,122 @@
-# Readoku - あなたの即時日本語翻訳コンパニオン
+[English description here](README.md) (英語版はこちら)
 
-Readokuは、ブラウジング中に遭遇するあらゆる英語の文章や単語の日本語への翻訳をユーザーが迅速に理解できるよう設計されたブラウザ拡張機能です。
+# 📚 Readoku
 
-## 現在の状況と機能
+<p align="center">
+  <img src="assets/banner.png" alt="Readoku Banner">
+</p>
 
-*   **デュアル翻訳モード:**
-    *   **詳細な単語検索（Shift + ホバー）**: `Shift`キーを押しながら英単語にホバーすると、Gemini APIによる詳細な情報（読み（ひらがな/カタカナ）、ローマ字読み、品詞、英語の定義、日本語での説明、例文（英語と日本語））が記載されたポップアップが表示されます。リッチな表示のためにJSON形式でレスポンスを要求します。
-    *   **フレーズ/文章翻訳（ハイライトしてクリック）**: テキスト（英語など）をハイライトすると、選択範囲の末尾に小さなReadokuボタン（R⚡）が表示されます。このボタンをクリックすると、ハイライトされたテキストが日本語に翻訳されてポップアップに表示されます。
-*   **Gemini API搭載**: ローカルプロキシサーバー経由でGoogle Gemini APIを利用し、強力でニュアンスのある翻訳を実現します。
-*   **ローカル辞書のフォールバック**: 単一単語の検索（Shift + ホバー）でGemini API呼び出しが失敗した場合、拡張機能はローカルの辞書(`scripts/`)で単語を検索し、基本的な定義を表示しようとします。
-*   **安全なAPIキー処理**: Gemini APIキーは環境変数を使用して安全に管理され、コードベースには保存されません。
-*   **拡張機能の有効/無効切り替え**: ユーザーはブラウザツールバーの拡張機能のポップアップメニューから拡張機能のオン/オフを切り替えることができます。
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="ライセンス">
+  <img src="https://img.shields.io/badge/status-active-brightgreen.svg" alt="プロジェクト状態">
+  <img src="https://img.shields.io/badge/chrome-v1.0-orange.svg" alt="Chrome版">
+  <img src="https://img.shields.io/badge/firefox-v1.0-orange.svg" alt="Firefox版">
+</p>
 
-## セットアップとインストール
+Readokuは、Gemini APIを活用した英語から日本語へのシームレスな翻訳を提供するブラウザ拡張機能です。学生、専門家、語学学習者がブラウザ内で作業の流れを中断することなく、即座にコンテキストを考慮した翻訳を必要とする場合の言語障壁を解消するために作成されました。
 
-Readokuを起動して実行するには、拡張機能とローカルプロキシサーバーの両方をセットアップする必要があります。
+## ✨ 機能
+
+### 🔍 詳細な単語検索（Shift + ホバー）
+
+<p align="center">
+  <img src="assets/exp2.gif" alt="翻訳例">
+</p>
+
+- `Shift`キーを押しながら英単語にホバー
+- 読み方、定義、例文などの詳細情報を取得
+- Gemini AIによる正確な翻訳
+
+### 🌐 フレーズ/文章翻訳（ハイライトしてクリック）
+
+<p align="center">
+  <img src="assets/exp1.gif" alt="さらなる例">
+</p>
+
+- テキストをハイライトしてReadokuボタン（R⚡）をクリック
+- ハイライトされたテキストを日本語に即時翻訳
+
+### 🧩 その他の機能
+- **Gemini API搭載**：ニュアンスを捉えた翻訳
+- **ローカル辞書のフォールバック**：API利用不可時に対応
+- **安全なAPIキー処理**：環境変数による管理
+- **簡単な有効/無効切り替え**：ブラウザツールバーから操作可能
+
+## 🖥️ システム構成
+
+Readokuはシンプルながら効果的な2つの部分から構成されています：
+
+- **ブラウザ拡張機能（フロントエンド）**：HTML、CSS、JavaScriptで構築されたユーザー向けコンポーネント。ユーザーの操作（ホバー、ハイライト）を捕捉し、UIを表示し、リクエストを送信します。
+- **プロキシサーバー（バックエンド）**：Gemini APIキーを安全に管理する軽量なPython Flaskサーバー。ブラウザ拡張機能からリクエストを受け取り、Gemini APIに転送し、翻訳結果を返します。これによりクライアント側のコードにAPIキーを露出させないようにしています。
+
+<p align="center">
+  <img src="assets/systemconfig.png" alt="システム構成">
+</p>
+
+## 🚀 クイックセットアップ
 
 ### 1. プロキシサーバーのセットアップ
 
-プロキシサーバーはGemini APIとの通信を処理します。
+プロキシサーバーはGemini APIとの安全な通信を処理します。
 
-1.  **`proxy-server`ディレクトリに移動します:**
-    ```bash
-    cd proxy-server
-    ```
-2.  **Python仮想環境の作成（推奨）:**
-    ```bash
-    python -m venv .venv  # または python3 -m venv .venv
-    source .venv/bin/activate  # Windowsの場合: .venv\Scripts\activate
-    ```
-3.  **依存関係のインストール:**
-    ```bash
-    pip install -r requirements.txt  # または pip3 install -r requirements.txt
-    ```
-4.  **Gemini APIキーの取得:**
-    *   [Google AI Studio](https://aistudio.google.com/app/apikey)（またはGoogle Cloud Console）にアクセスします。
-    *   **新しいAPIキー**を作成します。
-    *   **重要: APIキーを制限**し、「Generative Language API」（または使用している特定のGeminiモデル、例: `gemini-1.5-flash`）へのアクセスのみを許可するようにしてください。
-5.  **APIキーを環境変数として設定:**
-    ターミナルで、サーバーを実行する前に`GEMINI_API_KEY`環境変数を設定します:
-    ```bash
-    export GEMINI_API_KEY="あなたの新しい制限付きAPIキー"
-    ```
-    `\"あなたの新しい制限付きAPIキー\"`を実際に取得したキーに置き換えてください。
-    *（永続的なストレージのためには、この行を`~/.zshrc`や`~/.bashrc`のようなシェルの設定ファイルに追加し、そのファイルがGitにコミットされないようにすることを検討してください。）*
-6.  **プロキシサーバーの実行:**
-    ```bash
-    python server.py
-    ```
-    サーバーは通常`http://localhost:5001`で実行されているはずです。
+```bash
+# サーバーディレクトリに移動
+cd proxy-server
+
+# 仮想環境の作成と有効化
+python3 -m venv .venv
+source .venv/bin/activate  # Windowsの場合: .venv\Scripts\activate
+
+# 依存関係のインストール
+pip3 install -r requirements.txt
+```
+
+**APIキーの設定：**
+
+proxy-serverディレクトリに`.env`ファイルを作成し、APIキーを追加します：
+```
+GEMINI_API_KEY="あなたのAPIキーをここに"
+```
+
+サーバーは自動的にこのキーを読み込みます。これはシェルにエクスポートするよりも安全です。
+
+サーバーの実行：
+```bash
+python3 server.py
+```
+
+サーバーは http://localhost:5001 で起動します。
 
 ### 2. ブラウザ拡張機能のインストール
 
-1.  **リポジトリのクローン**:まだクローンしていない場合は、このリポジトリをクローンします。
-2.  **ブラウザの拡張機能管理ページを開く:**
-    *   **Chrome/Edge**: `chrome://extensions`に移動します。
-    *   **Firefox**: `about:debugging#/runtime/this-firefox`に移動します。
-3.  **開発者モードを有効にする:**
-    *   **Chrome/Edge**: 「デベロッパーモード」をオンに切り替えます（通常は右上）。
-    *   **Firefox**: 通常、`about:debugging`ページではデフォルトで有効になっています。
-4.  **拡張機能の読み込み:**
-    *   **Chrome/Edge**: 「パッケージ化されていない拡張機能を読み込む」をクリックし、このリポジトリから`extension`ディレクトリを選択します。
-    *   **Firefox**: 「一時的なアドオンを読み込む...」をクリックし、`extension`ディレクトリ内の`manifest.json`ファイルを選択します。
-5.  Readokuアイコンがブラウザのツールバーに表示されるはずです。
+- **Chrome/Edge**：`chrome://extensions`から開発者モードを有効にし、`extension`ディレクトリを「パッケージ化されていない拡張機能を読み込む」で選択
+- **Firefox**：`about:debugging`から`extension/manifest.json`ファイルを「一時的なアドオンを読み込む」で選択
 
-## 特定機能のテスト
+## ✅ 使い方
 
-*   **詳細な単語検索**:
-    *   プロキシサーバーが有効なAPIキーで実行されていることを確認します。
-    *   英語のテキストがあるウェブページを開きます。
-    *   `Shift`キーを押しながら英単語にホバーします。詳細なポップアップが表示されるはずです。
-    *   APIが失敗し、単語が`extension/dictionary.json`（例: "Japan"）に存在する場合、よりシンプルなフォールバック翻訳が表示されることがあります。
-*   **フレーズ/文章翻訳**:
-    *   テキスト（例: 「Hello, how are you?」のような英語の文章）をハイライトします。
-    *   選択範囲の近くに小さな「R⚡」ボタンが表示されるはずです。
-    *   ボタンをクリックします。ポップアップにハイライトされたテキストの日本語翻訳が表示されるはずです。 
+拡張機能がインストールされ、サーバーが実行されている場合：
+
+- **詳細な単語検索**：ウェブページ上の英単語に`Shift`キーを押しながらホバーすると、詳細な定義がポップアップで表示されます。
+- **文章翻訳**：フレーズや文章をハイライトし、近くに表示されるReadoku（R⚡）ボタンをクリックします。
+
+## 💡 コントリビューション
+
+コントリビューションを歓迎します！アプリのアーキテクチャと実装の詳細については、[appcore.md](appcore.md)をご覧ください。
+
+1. リポジトリをフォーク
+2. 機能ブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add some amazing feature'`)
+4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+5. プルリクエストを開く
+
+## 📄 ライセンス
+
+このプロジェクトはMITライセンスの下で公開されています - 詳細は[LICENSE](LICENSE)ファイルをご覧ください。
+
+## 📩 連絡先
+
+Naimi Nafis: [Github](https://github.com/NaimiNafis) | [Portfolio](https://naiminafis.github.io/portfolio/)
+
+Alvin Sebastian Lienardi: [Github](https://github.com/alvinlienardi) | [Portfolio](https://alvinlienardi.github.io/portfolio/)
+
+Duong Nam Phong: [Github](https://github.com/duongnphong) | [Portfolio](https://duongnphong.github.io/)
